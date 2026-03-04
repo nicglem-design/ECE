@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 
 export async function GET(request: NextRequest) {
@@ -19,7 +22,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "CoinGecko request failed" }, { status: res.status });
     }
     const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", Pragma: "no-cache" },
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to fetch" },

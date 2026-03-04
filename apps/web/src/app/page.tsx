@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
+import { TopCryptoWidget } from "@/components/TopCryptoWidget";
+import { HeaderCurrencySelector } from "@/components/HeaderCurrencySelector";
 
 export default function HomePage() {
   const { t } = useLanguage();
@@ -90,6 +92,22 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+      <section className="mx-auto max-w-6xl px-6 py-12">
+        <div className="rounded-2xl border border-slate-800/50 bg-slate-900/30 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-200">
+                {t("home.livePrices") || "Live crypto prices"}
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">
+                {t("home.livePricesDesc") || "Real-time prices from Binance, CoinGecko, CoinPaprika & CryptoCompare"}
+              </p>
+            </div>
+            <HeaderCurrencySelector />
+          </div>
+          <TopCryptoWidget />
+        </div>
+      </section>
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="grid gap-12 md:grid-cols-2">
           <div id="wallet" className="rounded-2xl border border-slate-800/50 bg-slate-900/30 p-8">

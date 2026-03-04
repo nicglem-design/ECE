@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const CRYPTOCOMPARE_BASE = "https://min-api.cryptocompare.com/data";
 const SYMBOLS = ["BTC", "ETH", "BNB", "SOL", "USDT"];
 const SYMBOL_TO_COINGECKO: Record<string, string> = {
@@ -49,7 +52,10 @@ export async function GET(request: NextRequest) {
       }
     }
     priceChange24h["tether"] = 0;
-    return NextResponse.json({ prices, priceChange24h });
+    return NextResponse.json(
+      { prices, priceChange24h },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", Pragma: "no-cache" } }
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to fetch" },

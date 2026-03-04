@@ -5,10 +5,13 @@ import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   fetchMarketChartViaAPI,
-  fetchTop5PricesMultiSource,
+  fetchTop5LivePricesFast,
   generateFallbackChartData,
   getFallbackPriceForCoin,
+  getPriceByCoinId,
+  TOP_5_COINS,
 } from "@/lib/coingecko";
+import { usePriceStream } from "@/hooks/usePriceStream";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -43,8 +46,10 @@ export default function CryptoDetailPage() {
   const params = useParams();
   const { currency } = useCurrency();
   const { t } = useLanguage();
+  const { prices: wsPrices, priceChange24h: wsChange24h } = usePriceStream(currency);
   const id = typeof params?.id === "string" ? params.id : "";
   const coin = getCoinInfo(id || "");
+  const isTop5 = TOP_5_COINS.some((c) => c.id === id);
 
   const [chartData, setChartData] = useState<[number, number][]>([]);
   const [price, setPrice] = useState<number | null>(null);
@@ -53,6 +58,7 @@ export default function CryptoDetailPage() {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(350);
+  const [isFallbackChart, setIsFallbackChart] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,12 +82,14 @@ export default function CryptoDetailPage() {
       const points = await fetchMarketChartViaAPI(id, currency, days);
       if (points.length > 0) {
         setChartData(points);
+        setIsFallbackChart(false);
       } else {
-        const { prices, priceChange24h } = await fetchTop5PricesMultiSource(currency);
-        const price = prices[id] ?? getFallbackPriceForCoin(id, currency);
+        const { prices, priceChange24h } = await fetchTop5LivePricesFast(currency);
+        const p = prices[id] ?? getFallbackPriceForCoin(id, currency);
         const change = priceChange24h[id] ?? null;
-        const fallback = generateFallbackChartData(price, days, change);
+        const fallback = generateFallbackChartData(p, days, change);
         setChartData(fallback);
+        setIsFallbackChart(true);
       }
       setChartLoading(false);
     },
@@ -93,17 +101,48 @@ export default function CryptoDetailPage() {
     fetchChart(range);
   }, [id, range, fetchChart]);
 
-  useEffect(() => {
+  const fetchPrice = useCallback((showLoading = false) => {
     if (!id) return;
-    setLoading(true);
-    fetchTop5PricesMultiSource(currency)
-      .then(({ prices, priceChange24h: change }) => {
-        const p = prices[id];
-        if (p != null) setPrice(p);
-        if (change[id] != null) setPriceChange24h(change[id]);
-      })
-      .finally(() => setLoading(false));
-  }, [id, currency]);
+    if (showLoading) setLoading(true);
+    const done = () => { if (showLoading) setLoading(false); };
+    if (isTop5) {
+      fetchTop5LivePricesFast(currency)
+        .then(({ prices, priceChange24h: change }) => {
+          const p = prices[id];
+          if (p != null && p > 0) setPrice(p);
+          if (change[id] != null) setPriceChange24h(change[id]);
+        })
+        .finally(done);
+    } else {
+      getPriceByCoinId(id, currency)
+        .then((p) => { if (p > 0) setPrice(p); })
+        .finally(done);
+    }
+  }, [id, currency, isTop5]);
+
+  // Initial fetch + REST polling (always runs as backup)
+  useEffect(() => {
+    fetchPrice(true);
+    const idInterval = setInterval(() => fetchPrice(false), 2000);
+    return () => clearInterval(idInterval);
+  }, [fetchPrice]);
+
+  // Stream prices for top-5 coins (apply when we have data)
+  useEffect(() => {
+    if (!isTop5 || !id) return;
+    const p = wsPrices[id];
+    const ch = wsChange24h[id];
+    if (p != null && p > 0) setPrice(p);
+    if (ch != null) setPriceChange24h(ch);
+  }, [isTop5, id, wsPrices, wsChange24h]);
+
+  // When price/change updates and we're showing fallback chart, regenerate chart with live data
+  useEffect(() => {
+    if (!id || !isFallbackChart || price == null || price <= 0) return;
+    const days: number | "max" = range === "max" ? "max" : parseInt(range, 10);
+    const fallback = generateFallbackChartData(price, days, priceChange24h ?? undefined);
+    setChartData(fallback);
+  }, [id, isFallbackChart, price, priceChange24h, range]);
 
   const changeColor = priceChange24h != null
     ? priceChange24h > 0 ? "text-green-400" : priceChange24h < 0 ? "text-red-400" : "text-slate-500"

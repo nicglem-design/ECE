@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,7 +22,7 @@ export default function WalletPage() {
   const [totalValue, setTotalValue] = useState<number | null>(null);
   const [allTimePct, setAllTimePct] = useState<number | null>(null);
 
-  useEffect(() => {
+  const fetchTotal = useCallback(() => {
     if (assets.length === 0) {
       setTotalValue(0);
       setAllTimePct(null);
@@ -50,6 +50,12 @@ export default function WalletPage() {
       }
     });
   }, [assets, currency]);
+
+  useEffect(() => {
+    fetchTotal();
+    const id = setInterval(fetchTotal, 2000); // Live prices every 2s
+    return () => clearInterval(id);
+  }, [fetchTotal]);
 
   const sym = getCurrencySymbol(currency || "usd");
 

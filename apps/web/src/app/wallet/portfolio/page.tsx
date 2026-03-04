@@ -81,7 +81,7 @@ export default function PortfolioPage() {
     setChangePct(change);
   }, []);
 
-  useEffect(() => {
+  const fetchAssetPrices = useCallback(() => {
     if (assets.length === 0) {
       setAssetValues({});
       setAssetPrices({});
@@ -99,6 +99,12 @@ export default function PortfolioPage() {
       setAssetPrices(prs);
     });
   }, [assets, currency]);
+
+  useEffect(() => {
+    fetchAssetPrices();
+    const id = setInterval(fetchAssetPrices, 2000); // Live prices every 2s
+    return () => clearInterval(id);
+  }, [fetchAssetPrices]);
 
   useEffect(() => {
     if (assets.length > 0 && !selectedChain) setSelectedChain(assets[0].chainId);

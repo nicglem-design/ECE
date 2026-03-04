@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const { assets, loading } = useWalletBalances();
   const [totalValue, setTotalValue] = useState<number | null>(null);
 
-  useEffect(() => {
+  const fetchTotal = useCallback(() => {
     if (assets.length === 0) {
       setTotalValue(0);
       return;
@@ -33,6 +33,12 @@ export default function DashboardPage() {
       setTotalValue(total);
     });
   }, [assets, currency]);
+
+  useEffect(() => {
+    fetchTotal();
+    const id = setInterval(fetchTotal, 2000); // Live prices every 2s
+    return () => clearInterval(id);
+  }, [fetchTotal]);
 
   const sym = getCurrencySymbol(currency || "usd");
 

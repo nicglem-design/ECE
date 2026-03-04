@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const COINPAPRIKA_BASE = "https://api.coinpaprika.com/v1";
 const TOP_5_IDS = ["btc-bitcoin", "eth-ethereum", "usdt-tether", "bnb-binance-coin", "sol-solana"];
 const COINPAPRIKA_TO_COINGECKO: Record<string, string> = {
@@ -47,7 +50,10 @@ export async function GET(request: NextRequest) {
         if (q?.percent_change_24h != null) priceChange24h[cgId] = q.percent_change_24h;
       }
     }
-    return NextResponse.json({ prices, priceChange24h });
+    return NextResponse.json(
+      { prices, priceChange24h },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", Pragma: "no-cache" } }
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to fetch" },
