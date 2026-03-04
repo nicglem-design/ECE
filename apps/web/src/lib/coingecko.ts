@@ -22,6 +22,9 @@ const FALLBACK_PRICES_USD: Record<string, number> = {
   bitcoin: 97000,
   solana: 200,
   polygon: 0.55,
+  "matic-network": 0.55,
+  "137": 0.55,
+  "matic": 0.55,
   bnb: 600,
   arbitrum: 2000,
   optimism: 2000,
@@ -87,6 +90,8 @@ const COINGECKO_TO_CHAIN: Record<string, string> = (() => {
 export const CHAIN_TO_COINGECKO: Record<string, string> = {
   ethereum: "ethereum",
   polygon: "matic-network",
+  "matic-network": "matic-network",
+  matic: "matic-network",
   bnb: "binancecoin",
   arbitrum: "ethereum",
   optimism: "ethereum",
@@ -112,6 +117,28 @@ export const CHAIN_TO_COINGECKO: Record<string, string> = {
   litecoin: "litecoin",
   dogecoin: "dogecoin",
   tether: "tether",
+  // EVM chain IDs (wallet APIs often return numeric IDs)
+  "1": "ethereum",
+  "56": "binancecoin",
+  "137": "matic-network",
+  "42161": "ethereum",
+  "10": "ethereum",
+  "43114": "avalanche-2",
+  "8453": "ethereum",
+  "250": "fantom",
+  "25": "cronos",
+  "100": "gnosis",
+  "324": "ethereum",
+  "59144": "ethereum",
+  "81457": "ethereum",
+  "5000": "mantle",
+  "42220": "celo",
+  "1284": "moonbeam",
+  "1088": "metis-token",
+  "534352": "ethereum",
+  "34443": "ethereum",
+  "2222": "kava",
+  "1666600000": "harmony",
 };
 
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
@@ -217,14 +244,6 @@ const TOP_5_COINS = [
   { id: "binancecoin", symbol: "BNB", name: "BNB" },
   { id: "solana", symbol: "SOL", name: "Solana" },
 ];
-
-/** Binance symbol for each top-5 coin (USDT pair). USDT has no USDT pair, use 1. */
-const COIN_TO_BINANCE_SYMBOL: Record<string, string> = {
-  bitcoin: "BTCUSDT",
-  ethereum: "ETHUSDT",
-  binancecoin: "BNBUSDT",
-  solana: "SOLUSDT",
-};
 
 export { TOP_5_COINS };
 
@@ -401,7 +420,13 @@ export async function fetchTop5LivePricesFast(
     const p = paprika?.prices[c.id];
     const cg = cgPrices?.[c.id];
     prices[c.id] =
-      (b != null && b > 0) ? b
+      c.id === "tether"
+        ? (cc != null && cc > 0) ? cc
+        : (p != null && p > 0) ? p
+        : (cg != null && cg > 0) ? cg
+        : (b != null && b > 0) ? b
+        : getFallbackPriceForCoin(c.id, fiat)
+      : (b != null && b > 0) ? b
       : (cc != null && cc > 0) ? cc
       : (p != null && p > 0) ? p
       : (cg != null && cg > 0) ? cg
@@ -579,14 +604,13 @@ async function fetchTop5FromCoinGeckoMarkets(
       return TOP_5_COINS.map((c) => {
         const d = byId[c.id];
         const spark7d = (d?.sparkline_in_7d?.price ?? []) as number[];
-        const spark24h =
-          spark7d.length >= 24 ? spark7d.slice(-24) : spark7d.length >= 2 ? spark7d : [];
+        const sparkline = spark7d.length >= 2 ? spark7d : [];
         return {
           id: c.id,
           symbol: c.symbol.toUpperCase(),
           name: c.name,
           price: d?.current_price ?? getFallbackPriceForCoin(c.id, fiat),
-          sparkline: spark24h,
+          sparkline,
           priceChange24h: d?.price_change_percentage_24h_in_currency ?? d?.price_change_percentage_24h ?? null,
         };
       });
@@ -619,13 +643,15 @@ export async function fetchTop5PricesOnly(fiatId: string): Promise<TopCoinWithSp
   });
 }
 
-/** Fetch chart from Binance klines (fallback for top-5 when CoinGecko fails). */
+/** OHLC candle shape for chart (compatible with lightweight-charts). */
+export type ChartCandlestick = { time: number; open: number; high: number; low: number; close: number };
+
+/** Fetch chart from Binance klines (fallback when CoinGecko fails). Supports any coin via dynamic symbol resolution. */
 async function fetchBinanceKlinesViaAPI(
   coinId: string,
   vsCurrency: string,
   days: number | "max"
 ): Promise<[number, number][]> {
-  if (!COIN_TO_BINANCE_SYMBOL[coinId]) return [];
   const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
   const base = getClientApiBase();
   try {
@@ -642,12 +668,180 @@ async function fetchBinanceKlinesViaAPI(
   }
 }
 
-/** Fetch market chart via API route (no CORS). CoinGecko first, Binance klines fallback for top-5. */
+/** Fetch chart from Bybit klines (fallback when Binance fails). Supports any coin via dynamic symbol resolution. */
+async function fetchBybitKlinesViaAPI(
+  coinId: string,
+  vsCurrency: string,
+  days: number | "max"
+): Promise<[number, number][]> {
+  const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/bybit/klines?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.prices ?? []) as [number, number][];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch Binance klines with full OHLC for chart detail page. Supports any coin via dynamic symbol resolution. */
+async function fetchBinanceKlinesWithOHLC(
+  coinId: string,
+  vsCurrency: string,
+  days: number
+): Promise<{ prices: [number, number][]; candles: ChartCandlestick[] } | null> {
+  const daysNum = Math.min(Math.max(1, days), 1825);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/binance/klines?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const prices = (data.prices ?? []) as [number, number][];
+    const candles = (data.candles ?? []) as ChartCandlestick[];
+    if (prices.length === 0) return null;
+    return { prices, candles };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch Bybit klines (fallback when Binance fails). Supports any coin via dynamic symbol resolution. */
+async function fetchBybitKlinesWithOHLC(
+  coinId: string,
+  vsCurrency: string,
+  days: number
+): Promise<{ prices: [number, number][]; candles: ChartCandlestick[] } | null> {
+  const daysNum = Math.min(Math.max(1, days), 365);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/bybit/klines?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const prices = (data.prices ?? []) as [number, number][];
+    const candles = (data.candles ?? []) as ChartCandlestick[];
+    if (prices.length === 0) return null;
+    return { prices, candles };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch CryptoCompare historical OHLC (real price data). Supports any coin via dynamic symbol resolution. */
+async function fetchCryptoCompareKlinesWithOHLC(
+  coinId: string,
+  vsCurrency: string,
+  days: number
+): Promise<{ prices: [number, number][]; candles: ChartCandlestick[] } | null> {
+  const daysNum = Math.min(Math.max(1, days), 365);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/cryptocompare/histoday?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const prices = (data.prices ?? []) as [number, number][];
+    const candles = (data.candles ?? []) as ChartCandlestick[];
+    if (prices.length === 0) return null;
+    return { prices, candles };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch CryptoCompare klines (prices only, for fetchMarketChartViaAPI). Supports any coin via dynamic symbol resolution. */
+async function fetchCryptoCompareKlinesViaAPI(
+  coinId: string,
+  vsCurrency: string,
+  days: number | "max"
+): Promise<[number, number][]> {
+  const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/cryptocompare/histoday?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.prices ?? []) as [number, number][];
+  } catch {
+    return [];
+  }
+}
+
+/** Try CoinGecko market_chart/range (from/to timestamps). Sometimes works when days param fails. */
+async function fetchCoinGeckoMarketChartRange(
+  coinId: string,
+  vsCurrency: string,
+  days: number
+): Promise<[number, number][]> {
+  const base = getClientApiBase();
+  const to = Math.floor(Date.now() / 1000);
+  const from = to - days * 86400;
+  try {
+    const u = `${base}/api/coingecko/market-chart-range?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&from=${from}&to=${to}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.prices ?? []) as [number, number][];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch chart from our orderbook (when we have trades). Same pattern as market prices. */
+async function fetchMarketChartFromMarketAPI(
+  coinId: string,
+  vsCurrency: string,
+  days: number | "max"
+): Promise<[number, number][]> {
+  const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
+  const base = getClientApiBase();
+  try {
+    const u = `${base}/api/market/chart?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const prices = (data.prices ?? []) as [number, number][];
+    return data.source === "orderbook" && prices.length >= 2 ? prices : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch market chart via API route (no CORS). Our orderbook first, then CoinGecko, Binance, etc. */
 export async function fetchMarketChartViaAPI(
   coinId: string,
   vsCurrency: string,
   days: number | "max"
 ): Promise<[number, number][]> {
+  const marketPrices = await fetchMarketChartFromMarketAPI(coinId, vsCurrency, days);
+  if (marketPrices.length >= 2) return marketPrices;
+
   const daysParam = days === "max" ? "max" : String(days);
   const base = getClientApiBase();
   const tryCoinGecko = async (currency: string) => {
@@ -675,7 +869,79 @@ export async function fetchMarketChartViaAPI(
   }
   const binancePrices = await fetchBinanceKlinesViaAPI(coinId, vsCurrency, days);
   if (binancePrices.length > 0) return binancePrices;
+  const bybitPrices = await fetchBybitKlinesViaAPI(coinId, vsCurrency, days);
+  if (bybitPrices.length > 0) return bybitPrices;
+  const ccPrices = await fetchCryptoCompareKlinesViaAPI(coinId, vsCurrency, days);
+  if (ccPrices.length > 0) return ccPrices;
+  const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
+  const rangePrices = await fetchCoinGeckoMarketChartRange(coinId, vsCurrency, daysNum);
+  if (rangePrices.length > 0) return rangePrices;
+  if (vsCurrency !== "usd") {
+    const rangeUsd = await fetchCoinGeckoMarketChartRange(coinId, "usd", daysNum);
+    if (rangeUsd.length > 0) return rangeUsd;
+  }
   return [];
+}
+
+/** Resolve chainId or alias to CoinGecko API id (e.g. polygon -> matic-network). */
+function resolveCoinGeckoId(coinId: string): string {
+  return CHAIN_TO_COINGECKO[coinId] ?? coinId;
+}
+
+/** Fetch market chart for detail page. Our orderbook first, then CoinGecko, Binance, etc. */
+export async function fetchMarketChartForDetail(
+  coinId: string,
+  vsCurrency: string,
+  days: number
+): Promise<{ prices: [number, number][]; candles?: ChartCandlestick[] }> {
+  const base = getClientApiBase();
+  const cgId = resolveCoinGeckoId(coinId);
+  const marketPrices = await fetchMarketChartFromMarketAPI(cgId, vsCurrency, days);
+  if (marketPrices.length >= 2) return { prices: marketPrices };
+
+  const daysParam = String(days);
+  const tryCoinGecko = async (currency: string) => {
+    const u = `${base}/api/coingecko/market-chart?coinId=${encodeURIComponent(cgId)}&currency=${currency}&days=${daysParam}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.prices ?? []) as [number, number][];
+  };
+  for (let attempt = 0; attempt <= 2; attempt++) {
+    try {
+      let prices = await tryCoinGecko(vsCurrency);
+      if (prices.length > 0) return { prices };
+      if (vsCurrency !== "usd") {
+        prices = await tryCoinGecko("usd");
+        if (prices.length > 0) return { prices };
+      }
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  const rangePrices = await fetchCoinGeckoMarketChartRange(cgId, vsCurrency, days);
+  if (rangePrices.length > 0) return { prices: rangePrices };
+  if (vsCurrency !== "usd") {
+    const rangeUsd = await fetchCoinGeckoMarketChartRange(cgId, "usd", days);
+    if (rangeUsd.length > 0) return { prices: rangeUsd };
+  }
+  const binance = await fetchBinanceKlinesWithOHLC(cgId, vsCurrency, days);
+  if (binance && binance.prices.length > 0) {
+    return { prices: binance.prices, candles: binance.candles };
+  }
+  const bybit = await fetchBybitKlinesWithOHLC(cgId, vsCurrency, days);
+  if (bybit && bybit.prices.length > 0) {
+    return { prices: bybit.prices, candles: bybit.candles };
+  }
+  const cc = await fetchCryptoCompareKlinesWithOHLC(cgId, vsCurrency, days);
+  if (cc && cc.prices.length > 0) {
+    return { prices: cc.prices, candles: cc.candles };
+  }
+  return { prices: [] };
 }
 
 /** Fetch 24h sparklines for polling. Uses single markets request when possible. */
@@ -691,7 +957,7 @@ export async function fetchTop5Sparklines24h(
   const fiat = (fiatId || "usd").toLowerCase();
   const results = await Promise.all(
     TOP_5_COINS.map(async (c) => {
-      const points = await fetchMarketChartViaAPI(c.id, fiat, 1);
+      const points = await fetchMarketChartViaAPI(c.id, fiat, 7);
       const arr = pricePointsToArray(points);
       const change24h =
         arr.length >= 2 && arr[0] > 0
@@ -814,6 +1080,17 @@ export function getFallbackPriceForCoin(coinId: string, fiatId: string): number 
     tether: 1,
     binancecoin: 600,
     solana: 200,
+    "matic-network": 0.55,
+    "avalanche-2": 28,
+    fantom: 0.38,
+    cronos: 0.1,
+    gnosis: 1,
+    mantle: 0.42,
+    celo: 0.38,
+    moonbeam: 0.18,
+    "metis-token": 32,
+    kava: 0.42,
+    harmony: 0.015,
   };
   const usd = usdPrices[coinId] ?? 2000;
   const rate = FIAT_TO_USD[fiatId] ?? 1;
@@ -1010,6 +1287,32 @@ export async function getPriceByCoinId(coinId: string, fiatId: string): Promise<
     }
   }
   return getFallbackPriceForCoin(coinId, fiatId);
+}
+
+/** Get price and 24h change for any coin via API route. Used when chart APIs fail. */
+export async function getPriceAndChangeForCoin(
+  coinId: string,
+  fiatId: string
+): Promise<{ price: number; priceChange24h: number | null }> {
+  const base = getClientApiBase();
+  const cgId = resolveCoinGeckoId(coinId);
+  try {
+    const u = `${base}/api/coingecko/coin-price?coinId=${encodeURIComponent(cgId)}&currency=${fiatId}&${cacheBust()}`;
+    const res = await fetch(u, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (!res.ok) return { price: getFallbackPriceForCoin(coinId, fiatId), priceChange24h: null };
+    const data = await res.json();
+    const price = data.price;
+    const priceChange24h = data.priceChange24h ?? null;
+    if (typeof price === "number" && price > 0) {
+      return { price, priceChange24h };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { price: getFallbackPriceForCoin(cgId, fiatId), priceChange24h: null };
 }
 
 export function getFallbackPrice(chainId: string, fiatId: string): number {

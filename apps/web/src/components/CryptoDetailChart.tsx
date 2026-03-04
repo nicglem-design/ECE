@@ -10,7 +10,7 @@ import {
   type CandlestickData,
 } from "lightweight-charts";
 
-export type ChartRange = "1" | "7" | "30" | "max";
+export type ChartRange = "1" | "7" | "30" | "90" | "150" | "365" | "1825";
 
 /** Convert [timestamp_ms, price][] to OHLC candles. Each point becomes a candle (open=prev, close=current). */
 function priceToCandles(points: [number, number][]): CandlestickData[] {
@@ -29,14 +29,30 @@ function priceToCandles(points: [number, number][]): CandlestickData[] {
   return candles;
 }
 
+/** OHLC candle shape (compatible with lightweight-charts CandlestickData) */
+export type CandlestickDataPoint = { time: number; open: number; high: number; low: number; close: number };
+
 type Props = {
   data: [number, number][];
+  candles?: CandlestickDataPoint[] | null;
   range: ChartRange;
   onRangeChange?: (r: ChartRange) => void;
   height?: number;
+  /** Max days for chart (e.g. 365 for stablecoins). Hides longer ranges like 5Y. */
+  maxDays?: number;
 };
 
-export function CryptoDetailChart({ data, range, onRangeChange, height = 400 }: Props) {
+const ALL_RANGES: { value: ChartRange; label: string; days: number }[] = [
+  { value: "1", label: "1D", days: 1 },
+  { value: "7", label: "1W", days: 7 },
+  { value: "30", label: "1M", days: 30 },
+  { value: "90", label: "3M", days: 90 },
+  { value: "150", label: "5M", days: 150 },
+  { value: "365", label: "1Y", days: 365 },
+  { value: "1825", label: "5Y", days: 1825 },
+];
+
+export function CryptoDetailChart({ data, candles: candlesProp, range, onRangeChange, height = 480, maxDays }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -60,7 +76,7 @@ export function CryptoDetailChart({ data, range, onRangeChange, height = 400 }: 
       },
       rightPriceScale: {
         borderColor: "rgba(148,163,184,0.2)",
-        scaleMargins: { top: 0.1, bottom: 0.2 },
+        scaleMargins: { top: 0.05, bottom: 0.08 },
       },
       timeScale: {
         borderColor: "rgba(148,163,184,0.2)",
@@ -83,8 +99,8 @@ export function CryptoDetailChart({ data, range, onRangeChange, height = 400 }: 
       wickDownColor: "#ef4444",
     });
 
-    const candles = priceToCandles(data);
-    candlestickSeries.setData(candles);
+    const candles = candlesProp?.length ? candlesProp : priceToCandles(data);
+    candlestickSeries.setData(candles as CandlestickData[]);
     chart.timeScale().fitContent();
 
     chartRef.current = chart;
@@ -102,21 +118,18 @@ export function CryptoDetailChart({ data, range, onRangeChange, height = 400 }: 
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [data, height]);
+  }, [data, candlesProp, height]);
 
-  const ranges: { value: ChartRange; label: string }[] = [
-    { value: "1", label: "1D" },
-    { value: "7", label: "1W" },
-    { value: "30", label: "1M" },
-    { value: "max", label: "All" },
-  ];
+  const ranges = maxDays != null
+    ? ALL_RANGES.filter((r) => r.days <= maxDays)
+    : ALL_RANGES;
 
   return (
     <div className="flex min-w-0 w-full flex-col">
       <div
         ref={chartContainerRef}
-        className="min-h-[280px] w-full min-w-[300px]"
-        style={{ height: typeof height === "number" ? height : 400 }}
+        className="min-h-[320px] w-full min-w-[300px]"
+        style={{ height: typeof height === "number" ? height : 480 }}
       />
       {onRangeChange && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">

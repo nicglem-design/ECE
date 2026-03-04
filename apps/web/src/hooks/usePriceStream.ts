@@ -39,7 +39,10 @@ async function pollAndEmit(fiatId: string) {
     if (Object.keys(prices).length > 0) {
       setConnectedState(true);
       const events = fromAppPricesMap(prices, priceChange24h);
-      const out: PriceStreamData = { prices: { tether: 1 }, priceChange24h: {} };
+      const out: PriceStreamData = {
+        prices: { tether: prices.tether ?? 1 },
+        priceChange24h: { tether: priceChange24h.tether ?? 0 },
+      };
       for (const { data } of events) {
         const parsed = parseMiniTickerEvent(data as BinanceMiniTickerEvent);
         if (parsed) {

@@ -29,7 +29,7 @@ const PERIODS = [
   { id: "3M", days: 90, label: "3M" },
   { id: "5M", days: 150, label: "5M" },
   { id: "1Y", days: 365, label: "1Y" },
-  { id: "All", days: "max" as const, label: "All" },
+  { id: "5Y", days: 1825, label: "5Y" },
 ];
 
 export function PortfolioChart({
@@ -48,7 +48,7 @@ export function PortfolioChart({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const periodConfig = PERIODS.find((p) => p.id === period) ?? PERIODS[2];
-  const days = periodConfig.days;
+  const days = periodConfig.days as number;
 
   useEffect(() => {
     if (assets.length === 0) {
@@ -88,8 +88,14 @@ export function PortfolioChart({
         }
         const ts = base.timestamps[i] ?? Date.now();
         const date = new Date(ts);
+        const timeLabel =
+          days <= 1
+            ? date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+            : days <= 7
+              ? date.toLocaleDateString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+              : date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: days > 365 ? "numeric" : undefined });
         return {
-          time: date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+          time: timeLabel,
           value: Math.round(value * 100) / 100,
           ts,
         };
@@ -134,14 +140,14 @@ export function PortfolioChart({
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50">
+      <div className="flex h-96 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50">
         <p className="text-slate-500">{t("portfolio.loadingChart")}</p>
       </div>
     );
   }
   if (data.length < 2) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="flex h-96 flex-col items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <p className="text-center text-slate-500">
           {assets.length > 0
             ? (t("portfolio.noChartData") || "No chart data available. Try again later.")
@@ -203,38 +209,48 @@ export function PortfolioChart({
           </button>
         </div>
       </div>
-      <div ref={containerRef} className="h-64" onWheel={handleWheel}>
+      <div ref={containerRef} className="h-96" onWheel={handleWheel}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={visibleData}>
+          <AreaChart data={visibleData} margin={{ top: 12, right: 16, left: 8, bottom: 8 }}>
             <defs>
               <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.3} />
+                <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.35} />
                 <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
-            <YAxis stroke="#64748b" fontSize={10} tickFormatter={(v) => `${sym} ${v}`} />
+            <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
+            <YAxis
+              stroke="#64748b"
+              fontSize={11}
+              tickFormatter={(v) => `${sym} ${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(2)}`}
+              domain={["auto", "auto"]}
+              tickLine={false}
+              width={56}
+            />
             <Tooltip
-              contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155" }}
-              formatter={(value: number) => [`${sym} ${value.toFixed(2)}`, "Value"]}
+              contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px" }}
+              formatter={(value: number) => [`${sym} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Value"]}
+              labelFormatter={(label) => label}
             />
             <Area
               type="monotone"
               dataKey="value"
               stroke="#0ea5e9"
+              strokeWidth={2.5}
               fill="url(#portfolioGradient)"
-              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 2, stroke: "#0ea5e9" }}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
       {data.length > 10 && (
-        <div className="mt-2 h-10">
+        <div className="mt-2 h-12">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data}>
               <Brush
                 dataKey="time"
-                height={24}
+                height={28}
                 stroke="#334155"
                 fill="#1e293b"
                 travellerWidth={8}

@@ -4,10 +4,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  fetchMarketChartViaAPI,
+  fetchMarketChartForDetail,
   fetchTop5LivePricesFast,
   generateFallbackChartData,
-  getFallbackPriceForCoin,
+  getPriceAndChangeForCoin,
   getPriceByCoinId,
   TOP_5_COINS,
 } from "@/lib/coingecko";
@@ -52,12 +52,14 @@ export default function CryptoDetailPage() {
   const isTop5 = TOP_5_COINS.some((c) => c.id === id);
 
   const [chartData, setChartData] = useState<[number, number][]>([]);
+  const [chartCandles, setChartCandles] = useState<{ time: number; open: number; high: number; low: number; close: number }[] | null>(null);
   const [price, setPrice] = useState<number | null>(null);
   const [priceChange24h, setPriceChange24h] = useState<number | null>(null);
+  const chartMaxDays = id === "tether" ? 365 : undefined;
   const [range, setRange] = useState<ChartRange>("7");
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
-  const [chartHeight, setChartHeight] = useState(350);
+  const [chartHeight, setChartHeight] = useState(420);
   const [isFallbackChart, setIsFallbackChart] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +68,7 @@ export default function CryptoDetailPage() {
     if (!el) return;
     const updateHeight = () => {
       const h = el.clientHeight;
-      if (h > 0) setChartHeight(Math.max(280, h));
+      if (h > 0) setChartHeight(Math.max(320, h));
     };
     updateHeight();
     const ro = new ResizeObserver(updateHeight);
@@ -78,17 +80,17 @@ export default function CryptoDetailPage() {
     async (r: ChartRange) => {
       if (!id) return;
       setChartLoading(true);
-      const days: number | "max" = r === "max" ? "max" : parseInt(r, 10);
-      const points = await fetchMarketChartViaAPI(id, currency, days);
-      if (points.length > 0) {
-        setChartData(points);
+      const days = parseInt(r, 10);
+      const { prices, candles } = await fetchMarketChartForDetail(id, currency, days);
+      if (prices.length > 0) {
+        setChartData(prices);
+        setChartCandles(candles && candles.length > 0 ? candles : null);
         setIsFallbackChart(false);
       } else {
-        const { prices, priceChange24h } = await fetchTop5LivePricesFast(currency);
-        const p = prices[id] ?? getFallbackPriceForCoin(id, currency);
-        const change = priceChange24h[id] ?? null;
-        const fallback = generateFallbackChartData(p, days, change);
+        const { price, priceChange24h } = await getPriceAndChangeForCoin(id, currency);
+        const fallback = generateFallbackChartData(price, days, priceChange24h);
         setChartData(fallback);
+        setChartCandles(null);
         setIsFallbackChart(true);
       }
       setChartLoading(false);
@@ -98,8 +100,11 @@ export default function CryptoDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetchChart(range);
-  }, [id, range, fetchChart]);
+    const effectiveRange =
+      chartMaxDays != null && parseInt(range, 10) > chartMaxDays ? "365" : range;
+    if (effectiveRange !== range) setRange(effectiveRange as ChartRange);
+    fetchChart(effectiveRange as ChartRange);
+  }, [id, range, fetchChart, chartMaxDays]);
 
   const fetchPrice = useCallback((showLoading = false) => {
     if (!id) return;
@@ -139,9 +144,10 @@ export default function CryptoDetailPage() {
   // When price/change updates and we're showing fallback chart, regenerate chart with live data
   useEffect(() => {
     if (!id || !isFallbackChart || price == null || price <= 0) return;
-    const days: number | "max" = range === "max" ? "max" : parseInt(range, 10);
+    const days = parseInt(range, 10);
     const fallback = generateFallbackChartData(price, days, priceChange24h ?? undefined);
     setChartData(fallback);
+    setChartCandles(null);
   }, [id, isFallbackChart, price, priceChange24h, range]);
 
   const changeColor = priceChange24h != null
@@ -185,12 +191,14 @@ export default function CryptoDetailPage() {
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
             </div>
           ) : chartData.length > 0 ? (
-            <div ref={containerRef} className="flex min-h-0 flex-1 flex-col" style={{ minHeight: 280 }}>
+            <div ref={containerRef} className="flex min-h-0 flex-1 flex-col" style={{ minHeight: 320 }}>
               <CryptoDetailChart
                 data={chartData}
+                candles={chartCandles}
                 range={range}
                 onRangeChange={setRange}
                 height={chartHeight}
+                maxDays={chartMaxDays}
               />
             </div>
           ) : (

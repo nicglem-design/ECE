@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBinanceSymbol } from "@/lib/coin-symbol";
+import { getBybitSymbol } from "@/lib/coin-symbol";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const BINANCE_BASE = "https://api.binance.com/api/v3";
+const BYBIT_BASE = "https://api.bybit.com/v5/market";
 /** Static map for common coins; unknown coins resolved dynamically via CoinGecko */
 const COIN_TO_SYMBOL: Record<string, string> = {
   bitcoin: "BTCUSDT",
   ethereum: "ETHUSDT",
   binancecoin: "BNBUSDT",
   solana: "SOLUSDT",
-  "matic-network": "MATICUSDT",
-  polygon: "MATICUSDT",
-  matic: "MATICUSDT",
-  "137": "MATICUSDT",
+  "matic-network": "POLUSDT",
+  polygon: "POLUSDT",
+  matic: "POLUSDT",
+  "137": "POLUSDT",
 };
 const FIAT_TO_USD: Record<string, number> = {
   usd: 1,
@@ -25,8 +25,8 @@ const FIAT_TO_USD: Record<string, number> = {
   dkk: 0.14,
 };
 
-/** Binance kline: [openTime, open, high, low, close, volume, closeTime, ...] */
-type BinanceKline = [number, string, string, string, string, string, number, ...unknown[]];
+/** Bybit kline: [startTime, open, high, low, close, volume, turnover] - newest first */
+type BybitKline = [string, string, string, string, string, string, string];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -40,22 +40,20 @@ export async function GET(request: NextRequest) {
 
   let symbol = COIN_TO_SYMBOL[coinId];
   if (!symbol) {
-    symbol = (await getBinanceSymbol(coinId)) ?? "";
+    symbol = (await getBybitSymbol(coinId)) ?? "";
   }
   if (!symbol) {
-    return NextResponse.json({ error: "Unsupported coin for Binance klines" }, { status: 400 });
+    return NextResponse.json({ error: "Unsupported coin for Bybit klines" }, { status: 400 });
   }
 
   const rate = FIAT_TO_USD[currency] ?? 1;
-  const now = Date.now();
   const interval =
-    days <= 1 ? "15m" : days <= 7 ? "30m" : days <= 30 ? "2h" : days <= 180 ? "4h" : "1d";
+    days <= 1 ? "15" : days <= 7 ? "60" : days <= 30 ? "120" : days <= 180 ? "240" : "D";
   const limit =
-    days <= 1 ? 96 : days <= 7 ? 336 : days <= 30 ? 360 : days <= 180 ? Math.min(days * 6, 1000) : Math.min(days, 1000);
-  const startTime = now - days * 24 * 60 * 60 * 1000;
+    days <= 1 ? 96 : days <= 7 ? 168 : days <= 30 ? 360 : days <= 180 ? Math.min(days * 6, 1000) : Math.min(days, 1000);
 
   try {
-    const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${interval}&startTime=${startTime}&limit=${limit}`;
+    const url = `${BYBIT_BASE}/kline?category=spot&symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(url, {
@@ -64,13 +62,14 @@ export async function GET(request: NextRequest) {
     });
     clearTimeout(timeout);
     if (!res.ok) {
-      return NextResponse.json({ error: "Binance request failed" }, { status: res.status });
+      return NextResponse.json({ error: "Bybit request failed" }, { status: res.status });
     }
-    const data = (await res.json()) as BinanceKline[];
+    const json = (await res.json()) as { retCode: number; result?: { list?: BybitKline[] } };
+    const list = json.result?.list ?? [];
     const prices: [number, number][] = [];
     const candles: { time: number; open: number; high: number; low: number; close: number }[] = [];
-    for (const k of data) {
-      const openTime = k[0];
+    for (const k of list.reverse()) {
+      const openTime = parseInt(k[0], 10);
       const open = parseFloat(k[1]) / rate;
       const high = parseFloat(k[2]) / rate;
       const low = parseFloat(k[3]) / rate;
@@ -95,7 +94,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Binance klines failed" },
+      { error: err instanceof Error ? err.message : "Bybit klines failed" },
       { status: 500 }
     );
   }

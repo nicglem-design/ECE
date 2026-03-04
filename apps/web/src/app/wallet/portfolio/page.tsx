@@ -11,16 +11,14 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { getCurrencySymbol } from "@/lib/currencies";
 import {
   getPricesBatch,
-  fetchMarketChartViaAPI,
+  fetchMarketChartForDetail,
   pricePointsToArray,
   getFallbackPriceForCoin,
   generateFallbackSparkline,
   CHAIN_TO_COINGECKO,
 } from "@/lib/coingecko";
 import { PriceSparklineChart } from "@/components/PriceSparklineChart";
-
-const SPARKLINE_WIDTH = 96;
-const SPARKLINE_HEIGHT = 36;
+import { SPARKLINE_WIDTH, SPARKLINE_HEIGHT, SPARKLINE_DAYS } from "@/lib/chart-config";
 
 function AssetSparkline({
   chainId,
@@ -33,20 +31,27 @@ function AssetSparkline({
   const [prices, setPrices] = useState<number[]>([]);
 
   useEffect(() => {
-    const cgId = CHAIN_TO_COINGECKO[chainId];
-    if (!cgId) return;
-    fetchMarketChartViaAPI(cgId, currency || "usd", 1).then((points) => {
-      const arr = pricePointsToArray(points);
-      if (arr.length >= 2) {
-        setPrices(arr);
-      } else {
+    const cgId = CHAIN_TO_COINGECKO[chainId] ?? chainId;
+    fetchMarketChartForDetail(cgId, currency || "usd", SPARKLINE_DAYS)
+      .then(({ prices: points }) => {
+        const arr = pricePointsToArray(points);
+        if (arr.length >= 2) {
+          setPrices(arr);
+        } else {
+          const fallbackPrice =
+            knownPrice != null && knownPrice > 0
+              ? knownPrice
+              : getFallbackPriceForCoin(cgId, currency || "usd");
+          setPrices(generateFallbackSparkline(fallbackPrice, 48));
+        }
+      })
+      .catch(() => {
         const fallbackPrice =
           knownPrice != null && knownPrice > 0
             ? knownPrice
             : getFallbackPriceForCoin(cgId, currency || "usd");
-        setPrices(generateFallbackSparkline(fallbackPrice, 24));
-      }
-    });
+        setPrices(generateFallbackSparkline(fallbackPrice, 48));
+      });
   }, [chainId, currency, knownPrice]);
 
   const change24h =
@@ -157,13 +162,13 @@ export default function PortfolioPage() {
                       <span className="font-medium text-slate-200">{a.symbol}</span>
                       <span className="ml-2 text-sm text-slate-500">{a.name}</span>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 text-right">
-                      <span className="font-mono text-slate-200">
-                        {sym} {(assetValues[a.chainId] ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="shrink-0">
+                    <div className="flex shrink-0 items-center gap-4">
                       <AssetSparkline chainId={a.chainId} price={assetPrices[a.chainId]} />
+                      <div className="flex min-w-[100px] flex-col items-end">
+                        <span className="font-mono text-slate-200">
+                          {sym} {(assetValues[a.chainId] ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}

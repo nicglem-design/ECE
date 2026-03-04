@@ -15,6 +15,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getCurrencySymbol } from "@/lib/currencies";
 import { PriceSparklineChart } from "@/components/PriceSparklineChart";
+import { SPARKLINE_WIDTH, SPARKLINE_HEIGHT } from "@/lib/chart-config";
 
 const PRICE_POLL_MS = 2000; // REST fallback when WebSocket disconnected
 const SPARKLINE_POLL_MS = 60000; // 60 sec - 24h charts (CoinGecko rate limits)
@@ -208,9 +209,9 @@ export function TopCryptoWidget() {
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)] items-center gap-4 px-4 pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            <div className="grid grid-cols-[minmax(0,1fr)_160px_minmax(0,1fr)] items-center gap-4 px-4 pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
               <span />
-              <span className="text-center">{t("dashboard.last24h")}</span>
+              <span className="text-center">{t("dashboard.last7d")}</span>
               <span />
             </div>
             {coins.map((c, i) => {
@@ -226,7 +227,7 @@ export function TopCryptoWidget() {
                 <Link
                   key={c.id}
                   href={`/crypto/${c.id}`}
-                  className="grid grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)] items-center gap-4 rounded-lg border border-slate-700/50 bg-slate-800/30 px-4 py-3 transition hover:border-slate-600 hover:bg-slate-800/50"
+                  className="grid grid-cols-[minmax(0,1fr)_160px_minmax(0,1fr)] items-center gap-4 rounded-lg border border-slate-700/50 bg-slate-800/30 px-4 py-3 transition hover:border-slate-600 hover:bg-slate-800/50"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-700/80 text-xs font-medium text-slate-400">
@@ -236,7 +237,12 @@ export function TopCryptoWidget() {
                     <span className="truncate text-sm text-slate-500">{c.name}</span>
                   </div>
                   <div className="flex justify-center">
-                    <PriceSparklineChart prices={c.sparkline ?? []} change24h={c.priceChange24h} />
+                    <PriceSparklineChart
+                      prices={c.sparkline ?? []}
+                      change24h={c.priceChange24h}
+                      width={SPARKLINE_WIDTH}
+                      height={SPARKLINE_HEIGHT}
+                    />
                   </div>
                   <div className="flex flex-col items-end gap-0.5">
                     <span className="font-mono text-sm text-slate-300 tabular-nums">
@@ -244,7 +250,7 @@ export function TopCryptoWidget() {
                     </span>
                     <span className={`text-xs font-medium tabular-nums ${changeColor}`}>
                       {change24h > 0 ? "+" : ""}
-                      {change24h.toFixed(2)}% 24h
+                      {change24h.toFixed(2)}% 7d
                     </span>
                   </div>
                 </Link>

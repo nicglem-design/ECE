@@ -216,3 +216,30 @@ export function getTrades(pair: string, limit = 50): Trade[] {
   const pairTrades = tradesByPair.get(pair) ?? [];
   return pairTrades.slice(-limit).reverse();
 }
+
+const FIAT_TO_USD: Record<string, number> = {
+  usd: 1,
+  eur: 1.08,
+  gbp: 1.27,
+  sek: 0.09,
+  nok: 0.09,
+  dkk: 0.14,
+};
+
+/**
+ * Get chart data [timestamp_ms, price][] from our trades.
+ * Returns null when we have fewer than 2 trades in range.
+ */
+export function getChartFromTrades(
+  pair: string,
+  days: number,
+  currency: string
+): [number, number][] | null {
+  const pairTrades = tradesByPair.get(pair) ?? [];
+  const cutoff = Date.now() - days * 86400 * 1000;
+  const recent = pairTrades.filter((t) => t.timestamp >= cutoff);
+  if (recent.length < 2) return null;
+  const rate = FIAT_TO_USD[currency.toLowerCase()] ?? 1;
+  const sorted = [...recent].sort((a, b) => a.timestamp - b.timestamp);
+  return sorted.map((t) => [t.timestamp, t.price / rate]);
+}
