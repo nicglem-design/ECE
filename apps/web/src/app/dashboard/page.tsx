@@ -36,7 +36,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchTotal();
-    const id = setInterval(fetchTotal, 2000); // Live prices every 2s
+    const id = setInterval(fetchTotal, 5000); // Live prices every 5s
     return () => clearInterval(id);
   }, [fetchTotal]);
 

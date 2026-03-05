@@ -4,6 +4,7 @@
  */
 
 import { API_BASE } from "@/lib/api";
+import { getCachedPricesBatch, setCachedPricesBatch, getCachedTop5, setCachedTop5 } from "@/lib/price-cache";
 
 export const FIAT_CURRENCIES = [
   { id: "usd", name: "US Dollar", symbol: "USD" },
@@ -214,6 +215,8 @@ export async function getPricesBatch(
 ): Promise<Record<string, number>> {
   const unique = [...new Set(chainIds)];
   if (unique.length === 0) return {};
+  const cached = getCachedPricesBatch(unique, fiatId);
+  if (cached) return cached;
   const apiPrices = await fetchPricesFromMultiSourceAPI(unique, fiatId);
   if (apiPrices && Object.keys(apiPrices).length > 0) {
     const out: Record<string, number> = {};
@@ -221,6 +224,7 @@ export async function getPricesBatch(
       const price = apiPrices[chainId];
       out[chainId] = price != null && price > 0 ? price : getFallbackPrice(chainId, fiatId);
     }
+    setCachedPricesBatch(unique, fiatId, out);
     return out;
   }
   const result = await fetchPrices(unique, [fiatId]);
@@ -234,6 +238,7 @@ export async function getPricesBatch(
     const price = result[cgId]?.[fiatId] ?? 0;
     out[chainId] = price > 0 ? price : getFallbackPrice(chainId, fiatId);
   }
+  setCachedPricesBatch(unique, fiatId, out);
   return out;
 }
 
@@ -308,27 +313,6 @@ export type Top5MultiSourceResult = {
 /** Cache-busting param for fresh price fetches */
 const cacheBust = () => `_=${Date.now()}`;
 
-/** Fetch from our order book (when we have trades) or consensus. Our book takes priority when we have liquidity. */
-async function fetchTop5FromMarketPrices(
-  fiatId: string
-): Promise<{ prices: Record<string, number>; priceChange24h: Record<string, number> } | null> {
-  try {
-    const base = getClientApiBase();
-    const res = await fetch(`${base}/api/market/prices?currency=${fiatId}&${cacheBust()}`, {
-      cache: "no-store",
-      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const prices = data.prices ?? {};
-    const priceChange24h = data.priceChange24h ?? {};
-    if (Object.keys(prices).length > 0) return { prices, priceChange24h };
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 /** Fetch top 5 from Binance via API (price + 24h %). */
 async function fetchTop5FromBinance(
   fiatId: string
@@ -397,50 +381,101 @@ async function fetchTop5FromCryptoCompareViaAPI(
   }
 }
 
-/** Fast live prices. Uses our order book when we have trades, else external APIs. */
+const PRICE_TOLERANCE_PCT = 2.5;
+const CHANGE_TOLERANCE_PCT = 3;
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function withinTolerance(a: number, b: number, pct: number): boolean {
+  if (a === 0 || b === 0) return a === b;
+  const diff = Math.abs(a - b) / Math.min(a, b);
+  return diff <= pct / 100;
+}
+
+/** Multi-source consensus: combine all sources, use median when 2+ agree within tolerance. */
+function computeMultiSourcePrice(
+  values: number[],
+  fallback: number
+): number {
+  const valid = values.filter((v) => v != null && v > 0);
+  if (valid.length === 0) return fallback;
+  if (valid.length === 1) return valid[0];
+  const cluster = valid.filter((v) => {
+    const count = valid.filter((w) => withinTolerance(v, w, PRICE_TOLERANCE_PCT)).length;
+    return count >= 2;
+  });
+  return cluster.length >= 2 ? median(cluster) : median(valid);
+}
+
+function computeMultiSourceChange(values: (number | null | undefined)[]): number | null {
+  const valid = values.filter((v): v is number => v != null && !Number.isNaN(v));
+  if (valid.length === 0) return null;
+  if (valid.length === 1) return valid[0];
+  const cluster = valid.filter((v) => {
+    const count = valid.filter((w) => Math.abs(v - w) <= CHANGE_TOLERANCE_PCT).length;
+    return count >= 2;
+  });
+  return cluster.length >= 2 ? median(cluster) : median(valid);
+}
+
+/** Fast live prices. Fetches from all sources in parallel, combines with multi-source consensus. */
 export async function fetchTop5LivePricesFast(
   fiatId: string
 ): Promise<Top5MultiSourceResult> {
+  const cached = getCachedTop5(fiatId);
+  if (cached) return cached;
   const fiat = (fiatId || "usd").toLowerCase();
-  const market = await fetchTop5FromMarketPrices(fiatId);
-  if (market && Object.keys(market.prices).length > 1) {
-    return market;
-  }
-  const [binance, cryptocompare, paprika, cgPrices] = await Promise.all([
+  const [consensus, cgMarkets, binance, cryptocompare, paprika, cgPrices] = await Promise.all([
+    fetchTop5FromConsensus(fiatId),
+    fetchTop5FromCoinGeckoMarkets(fiatId),
     fetchTop5FromBinance(fiatId),
     fetchTop5FromCryptoCompareViaAPI(fiatId),
     fetchTop5FromCoinPaprikaViaAPI(fiatId),
     fetchTop5FromCoinGeckoViaAPI(fiatId),
   ]);
+  const cgMarketPrices: Record<string, number> = {};
+  const cgMarketChange: Record<string, number> = {};
+  if (cgMarkets) {
+    for (const m of cgMarkets) {
+      if (m.price > 0) cgMarketPrices[m.id] = m.price;
+      if (m.priceChange24h != null) cgMarketChange[m.id] = m.priceChange24h;
+    }
+  }
+  const sources: Array<{ prices: Record<string, number>; priceChange24h: Record<string, number> }> = [];
+  if (consensus && Object.keys(consensus.prices).length > 0) sources.push(consensus);
+  if (Object.keys(cgMarketPrices).length > 0) sources.push({ prices: cgMarketPrices, priceChange24h: cgMarketChange });
+  if (binance) sources.push(binance);
+  if (cryptocompare) sources.push(cryptocompare);
+  if (paprika) sources.push(paprika);
+  if (cgPrices && Object.keys(cgPrices).length > 0) sources.push({ prices: cgPrices, priceChange24h: {} });
+
   const prices: Record<string, number> = {};
   const priceChange24h: Record<string, number> = {};
   for (const c of TOP_5_COINS) {
-    const b = binance?.prices[c.id];
-    const cc = cryptocompare?.prices[c.id];
-    const p = paprika?.prices[c.id];
-    const cg = cgPrices?.[c.id];
-    prices[c.id] =
-      c.id === "tether"
-        ? (cc != null && cc > 0) ? cc
-        : (p != null && p > 0) ? p
-        : (cg != null && cg > 0) ? cg
-        : (b != null && b > 0) ? b
-        : getFallbackPriceForCoin(c.id, fiat)
-      : (b != null && b > 0) ? b
-      : (cc != null && cc > 0) ? cc
-      : (p != null && p > 0) ? p
-      : (cg != null && cg > 0) ? cg
-      : getFallbackPriceForCoin(c.id, fiat);
-    const bCh = binance?.priceChange24h[c.id];
-    const ccCh = cryptocompare?.priceChange24h[c.id];
-    const pCh = paprika?.priceChange24h[c.id];
-    priceChange24h[c.id] =
-      (bCh != null && c.id !== "tether") ? bCh
-      : (ccCh != null) ? ccCh
-      : (pCh != null) ? pCh
-      : 0;
+    const priceValues = sources.flatMap((s) => {
+      const v = s.prices[c.id];
+      return v != null && v > 0 ? [v] : [];
+    });
+    prices[c.id] = computeMultiSourcePrice(priceValues, getFallbackPriceForCoin(c.id, fiat));
+
+    if (c.id === "tether") {
+      priceChange24h[c.id] = 0;
+    } else {
+      const changeValues = sources.flatMap((s) => {
+        const v = s.priceChange24h[c.id];
+        return v != null && !Number.isNaN(v) ? [v] : [];
+      });
+      priceChange24h[c.id] = computeMultiSourceChange(changeValues) ?? 0;
+    }
   }
-  return { prices, priceChange24h };
+  const result = { prices, priceChange24h };
+  setCachedTop5(fiatId, result);
+  return result;
 }
 
 /** Fetch consensus data (multi-source verified). Primary source when available. */
@@ -485,7 +520,7 @@ async function fetchTop5FromCoinPaprikaViaAPI(
   }
 }
 
-/** Multi-source: Consensus (verified) > Binance > CoinGecko > CoinPaprika > CryptoCompare > fallback. */
+/** Multi-source: fetches all sources in parallel, combines with consensus (median when 2+ agree). */
 export async function fetchTop5PricesMultiSource(
   fiatId: string
 ): Promise<Top5MultiSourceResult> {
@@ -499,39 +534,41 @@ export async function fetchTop5PricesMultiSource(
     fetchTop5FromCryptoCompareViaAPI(fiatId),
   ]);
 
+  const cgMarketPrices: Record<string, number> = {};
+  const cgMarketChange: Record<string, number> = {};
+  if (cgMarkets) {
+    for (const m of cgMarkets) {
+      if (m.price > 0) cgMarketPrices[m.id] = m.price;
+      if (m.priceChange24h != null) cgMarketChange[m.id] = m.priceChange24h;
+    }
+  }
+  const sources: Array<{ prices: Record<string, number>; priceChange24h: Record<string, number> }> = [];
+  if (consensus && Object.keys(consensus.prices).length > 0) sources.push(consensus);
+  if (Object.keys(cgMarketPrices).length > 0) sources.push({ prices: cgMarketPrices, priceChange24h: cgMarketChange });
+  if (binance) sources.push(binance);
+  if (cryptocompare) sources.push(cryptocompare);
+  if (paprika) sources.push(paprika);
+  if (cgPrices && Object.keys(cgPrices).length > 0) sources.push({ prices: cgPrices, priceChange24h: {} });
+
   const prices: Record<string, number> = {};
   const priceChange24h: Record<string, number> = {};
-
   for (const c of TOP_5_COINS) {
-    const consensusPrice = consensus?.prices[c.id];
-    const binancePrice = binance?.prices[c.id];
-    const cgPrice = cgPrices?.[c.id];
-    const cgMarket = cgMarkets?.find((m) => m.id === c.id);
-    const cgMarketPrice = cgMarket?.price;
-    const paprikaPrice = paprika?.prices[c.id];
-    const ccPrice = cryptocompare?.prices[c.id];
-    prices[c.id] =
-      (consensusPrice != null && consensusPrice > 0 && (consensus?.sourcesUsed?.[c.id] ?? 0) >= 1) ? consensusPrice
-      : (binancePrice != null && binancePrice > 0) ? binancePrice
-      : (cgPrice != null && cgPrice > 0) ? cgPrice
-      : (cgMarketPrice != null && cgMarketPrice > 0) ? cgMarketPrice
-      : (paprikaPrice != null && paprikaPrice > 0) ? paprikaPrice
-      : (ccPrice != null && ccPrice > 0) ? ccPrice
-      : getFallbackPriceForCoin(c.id, fiat);
-    const consensusChange = consensus?.priceChange24h[c.id];
-    const binanceChange = binance?.priceChange24h[c.id];
-    const cgChange = cgMarket?.priceChange24h;
-    const paprikaChange = paprika?.priceChange24h[c.id];
-    const ccChange = cryptocompare?.priceChange24h[c.id];
-    priceChange24h[c.id] =
-      (consensusChange != null && (consensus?.sourcesUsed?.[c.id] ?? 0) >= 1) ? consensusChange
-      : (binanceChange != null && c.id !== "tether") ? binanceChange
-      : (cgChange != null) ? cgChange
-      : (paprikaChange != null) ? paprikaChange
-      : (ccChange != null) ? ccChange
-      : 0;
-  }
+    const priceValues = sources.flatMap((s) => {
+      const v = s.prices[c.id];
+      return v != null && v > 0 ? [v] : [];
+    });
+    prices[c.id] = computeMultiSourcePrice(priceValues, getFallbackPriceForCoin(c.id, fiat));
 
+    if (c.id === "tether") {
+      priceChange24h[c.id] = 0;
+    } else {
+      const changeValues = sources.flatMap((s) => {
+        const v = s.priceChange24h[c.id];
+        return v != null && !Number.isNaN(v) ? [v] : [];
+      });
+      priceChange24h[c.id] = computeMultiSourceChange(changeValues) ?? 0;
+    }
+  }
   return { prices, priceChange24h };
 }
 
@@ -810,38 +847,12 @@ async function fetchCoinGeckoMarketChartRange(
   }
 }
 
-/** Fetch chart from our orderbook (when we have trades). Same pattern as market prices. */
-async function fetchMarketChartFromMarketAPI(
-  coinId: string,
-  vsCurrency: string,
-  days: number | "max"
-): Promise<[number, number][]> {
-  const daysNum = days === "max" ? 365 : Math.min(Math.max(1, days), 365);
-  const base = getClientApiBase();
-  try {
-    const u = `${base}/api/market/chart?coinId=${encodeURIComponent(coinId)}&currency=${vsCurrency}&days=${daysNum}&${cacheBust()}`;
-    const res = await fetch(u, {
-      cache: "no-store",
-      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const prices = (data.prices ?? []) as [number, number][];
-    return data.source === "orderbook" && prices.length >= 2 ? prices : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Fetch market chart via API route (no CORS). Our orderbook first, then CoinGecko, Binance, etc. */
+/** Fetch market chart via API route (no CORS). Uses real external APIs until site/app is active. */
 export async function fetchMarketChartViaAPI(
   coinId: string,
   vsCurrency: string,
   days: number | "max"
 ): Promise<[number, number][]> {
-  const marketPrices = await fetchMarketChartFromMarketAPI(coinId, vsCurrency, days);
-  if (marketPrices.length >= 2) return marketPrices;
-
   const daysParam = days === "max" ? "max" : String(days);
   const base = getClientApiBase();
   const tryCoinGecko = async (currency: string) => {
@@ -888,7 +899,7 @@ function resolveCoinGeckoId(coinId: string): string {
   return CHAIN_TO_COINGECKO[coinId] ?? coinId;
 }
 
-/** Fetch market chart for detail page. Our orderbook first, then CoinGecko, Binance, etc. */
+/** Fetch market chart for detail page. Uses real external APIs until site/app is active. */
 export async function fetchMarketChartForDetail(
   coinId: string,
   vsCurrency: string,
@@ -896,9 +907,6 @@ export async function fetchMarketChartForDetail(
 ): Promise<{ prices: [number, number][]; candles?: ChartCandlestick[] }> {
   const base = getClientApiBase();
   const cgId = resolveCoinGeckoId(coinId);
-  const marketPrices = await fetchMarketChartFromMarketAPI(cgId, vsCurrency, days);
-  if (marketPrices.length >= 2) return { prices: marketPrices };
-
   const daysParam = String(days);
   const tryCoinGecko = async (currency: string) => {
     const u = `${base}/api/coingecko/market-chart?coinId=${encodeURIComponent(cgId)}&currency=${currency}&days=${daysParam}&${cacheBust()}`;
@@ -944,20 +952,23 @@ export async function fetchMarketChartForDetail(
   return { prices: [] };
 }
 
-/** Fetch 24h sparklines for polling. Uses single markets request when possible. */
+/** Fetch 24h sparklines for polling. Uses 1-day market chart for true 24h data. */
 export async function fetchTop5Sparklines24h(
   fiatId: string
 ): Promise<Record<string, { sparkline: number[]; priceChange24h: number | null }>> {
   const markets = await fetchTop5FromCoinGeckoMarkets(fiatId);
-  if (markets) {
+  if (markets && markets.every((c) => c.sparkline.length >= 24)) {
     return Object.fromEntries(
-      markets.map((c) => [c.id, { sparkline: c.sparkline, priceChange24h: c.priceChange24h }])
+      markets.map((c) => {
+        const sparkline24h = c.sparkline.slice(-24);
+        return [c.id, { sparkline: sparkline24h, priceChange24h: c.priceChange24h }];
+      })
     );
   }
   const fiat = (fiatId || "usd").toLowerCase();
   const results = await Promise.all(
     TOP_5_COINS.map(async (c) => {
-      const points = await fetchMarketChartViaAPI(c.id, fiat, 7);
+      const points = await fetchMarketChartViaAPI(c.id, fiat, 1);
       const arr = pricePointsToArray(points);
       const change24h =
         arr.length >= 2 && arr[0] > 0
@@ -972,10 +983,8 @@ export async function fetchTop5Sparklines24h(
 }
 
 /**
- * Fetch top 5 with multi-source fallback. Uses Promise.allSettled - never fails entirely.
- * Sources: Consensus (verified), Binance, CoinGecko (simple + markets), CoinPaprika, CryptoCompare.
- * Price: Consensus (2+ agree) > Binance > CoinGecko > CoinPaprika > CryptoCompare > fallback
- * 24h%: Consensus > Binance > CoinGecko markets > CoinPaprika > CryptoCompare > 0
+ * Fetch top 5 with multi-source consensus. Uses Promise.allSettled - never fails entirely.
+ * Fetches all sources in parallel, combines with median when 2+ agree within tolerance.
  * Sparkline: CoinGecko markets > generated from price+change
  */
 export async function fetchTop5DataFull(fiatId: string): Promise<TopCoinWithSparkline[]> {
@@ -996,37 +1005,41 @@ export async function fetchTop5DataFull(fiatId: string): Promise<TopCoinWithSpar
   const paprika = paprikaRes.status === "fulfilled" ? paprikaRes.value : null;
   const cryptocompare = ccRes.status === "fulfilled" ? ccRes.value : null;
 
+  const cgMarketPrices: Record<string, number> = {};
+  const cgMarketChange: Record<string, number> = {};
+  if (cgMarkets) {
+    for (const m of cgMarkets) {
+      if (m.price > 0) cgMarketPrices[m.id] = m.price;
+      if (m.priceChange24h != null) cgMarketChange[m.id] = m.priceChange24h;
+    }
+  }
+  const sources: Array<{ prices: Record<string, number>; priceChange24h: Record<string, number> }> = [];
+  if (consensus && Object.keys(consensus.prices).length > 0) sources.push(consensus);
+  if (Object.keys(cgMarketPrices).length > 0) sources.push({ prices: cgMarketPrices, priceChange24h: cgMarketChange });
+  if (binance) sources.push(binance);
+  if (cryptocompare) sources.push(cryptocompare);
+  if (paprika) sources.push(paprika);
+  if (cgPrices && Object.keys(cgPrices).length > 0) sources.push({ prices: cgPrices, priceChange24h: {} });
+
   return TOP_5_COINS.map((c) => {
-    const consensusPrice = consensus?.prices[c.id];
-    const consensusAgree = consensus?.sourcesUsed?.[c.id] ?? 0;
-    const binancePrice = binance?.prices[c.id];
-    const cgPrice = cgPrices?.[c.id];
+    const priceValues = sources.flatMap((s) => {
+      const v = s.prices[c.id];
+      return v != null && v > 0 ? [v] : [];
+    });
+    const price = computeMultiSourcePrice(priceValues, getFallbackPriceForCoin(c.id, fiat));
+
+    let priceChange24h: number | null;
+    if (c.id === "tether") {
+      priceChange24h = 0;
+    } else {
+      const changeValues = sources.flatMap((s) => {
+        const v = s.priceChange24h[c.id];
+        return v != null && !Number.isNaN(v) ? [v] : [];
+      });
+      priceChange24h = computeMultiSourceChange(changeValues);
+    }
+
     const cgMarket = cgMarkets?.find((m) => m.id === c.id);
-    const cgMarketPrice = cgMarket?.price;
-    const paprikaPrice = paprika?.prices[c.id];
-    const ccPrice = cryptocompare?.prices[c.id];
-    const price =
-      (consensusPrice != null && consensusPrice > 0 && consensusAgree >= 1) ? consensusPrice
-      : (binancePrice != null && binancePrice > 0) ? binancePrice
-      : (cgPrice != null && cgPrice > 0) ? cgPrice
-      : (cgMarketPrice != null && cgMarketPrice > 0) ? cgMarketPrice
-      : (paprikaPrice != null && paprikaPrice > 0) ? paprikaPrice
-      : (ccPrice != null && ccPrice > 0) ? ccPrice
-      : getFallbackPriceForCoin(c.id, fiat);
-
-    const consensusChange = consensus?.priceChange24h[c.id];
-    const binanceChange = binance?.priceChange24h[c.id];
-    const cgChange = cgMarket?.priceChange24h;
-    const paprikaChange = paprika?.priceChange24h[c.id];
-    const ccChange = cryptocompare?.priceChange24h[c.id];
-    const priceChange24h =
-      (consensusChange != null && consensusAgree >= 1) ? consensusChange
-      : (binanceChange != null && c.id !== "tether") ? binanceChange
-      : (cgChange != null) ? cgChange
-      : (paprikaChange != null) ? paprikaChange
-      : (ccChange != null) ? ccChange
-      : null;
-
     let sparkline = cgMarket?.sparkline ?? [];
     if (sparkline.length < 2 && price > 0) {
       sparkline =

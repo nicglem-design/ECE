@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = `${CRYPTOCOMPARE_BASE}/pricemultifull?fsyms=${SYMBOLS.join(",")}&tsyms=${tsym}`;
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } });
+    const res = await fetchExternal(url);
     if (!res.ok) {
       return NextResponse.json({ error: "CryptoCompare request failed" }, { status: res.status });
     }

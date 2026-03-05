@@ -73,8 +73,16 @@ export function useWalletBalances() {
     try {
       setLoading(true);
       setError(null);
-      const data = await apiGet<{ assets: Asset[] }>("/api/v1/wallet/balances");
-      setAssets(data.assets || []);
+      const data = await apiGet<{ assets: (Asset & { chain_id?: string })[] }>("/api/v1/wallet/balances");
+      const raw = data.assets || [];
+      setAssets(
+        raw.map((a) => ({
+          chainId: a.chainId ?? a.chain_id ?? "",
+          symbol: a.symbol ?? "",
+          name: a.name ?? "",
+          amount: a.amount ?? "0",
+        }))
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load balances");
       setAssets([]);

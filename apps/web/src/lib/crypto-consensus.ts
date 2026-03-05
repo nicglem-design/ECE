@@ -3,6 +3,8 @@
  * and returns prices when 2+ sources agree. Used by both /api/crypto/consensus and /api/v1/prices.
  */
 
+import { fetchExternal } from "./fetch-external";
+
 const TOP_5_COINS = [
   { id: "bitcoin", symbol: "BTC" },
   { id: "ethereum", symbol: "ETH" },
@@ -33,9 +35,8 @@ const FALLBACK_USD: Record<string, number> = {
 
 async function fetchBinance(currency: string) {
   try {
-    const res = await fetch(
-      `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]))}`,
-      { cache: "no-store", next: { revalidate: 0 } }
+    const res = await fetchExternal(
+      `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]))}`
     );
     if (!res.ok) return null;
     const data = (await res.json()) as Array<{ symbol: string; lastPrice: string; priceChangePercent: string }>;
@@ -59,9 +60,8 @@ async function fetchBinance(currency: string) {
 async function fetchCoinGecko(currency: string) {
   try {
     const ids = TOP_5_COINS.map((c) => c.id).join(",");
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${currency}&include_24hr_change=true`,
-      { cache: "no-store", next: { revalidate: 0 } }
+    const res = await fetchExternal(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=${currency}&include_24hr_change=true`
     );
     if (!res.ok) return null;
     const data = (await res.json()) as Record<string, { [k: string]: number; usd_24h_change?: number }>;
@@ -122,9 +122,8 @@ async function fetchCoinPaprika(currency: string) {
 
 async function fetchCryptoCompare(currency: string) {
   try {
-    const res = await fetch(
-      "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,BNB,SOL,USDT&tsyms=USD",
-      { cache: "no-store", next: { revalidate: 0 } }
+    const res = await fetchExternal(
+      "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,BNB,SOL,USDT&tsyms=USD"
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {

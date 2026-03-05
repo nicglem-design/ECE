@@ -7,6 +7,7 @@ import { TerminologyProvider } from "@/contexts/TerminologyContext";
 import { AskKanoProvider } from "@/contexts/AskKanoContext";
 import { AskKanoShell } from "@/components/AskKanoShell";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CookieConsent } from "@/components/CookieConsent";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://kanoxchange.com"),
@@ -37,6 +38,7 @@ export default function RootLayout({
                 <AskKanoProvider>
                   <AskKanoShell />
                   {children}
+                  <CookieConsent />
                 </AskKanoProvider>
               </TerminologyProvider>
             </CurrencyProvider>

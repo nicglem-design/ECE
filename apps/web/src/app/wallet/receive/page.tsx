@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWalletChains, useWalletAddresses } from "@/hooks/useWallet";
@@ -23,10 +23,11 @@ function buildBip21Uri(protocol: string, address: string, amountCrypto?: string)
   return uri;
 }
 
-export default function ReceivePage() {
+function ReceivePageContent() {
   const { t } = useLanguage();
   const { isAuthenticated, logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currency } = useCurrency();
   useEffect(() => { setFiatCurrency(currency || "usd"); }, [currency]);
   const { chains, loading: chainsLoading } = useWalletChains();
@@ -45,8 +46,13 @@ export default function ReceivePage() {
   const supportsBip21 = selectedChain && BIP21_CHAINS.includes(selectedChain);
 
   useEffect(() => {
-    if (chains.length > 0 && !selectedChain) setSelectedChain(chains[0].id);
-  }, [chains, selectedChain]);
+    const urlChain = searchParams.get("chain") ?? "";
+    if (urlChain && chains.some((c) => c.id === urlChain)) {
+      setSelectedChain(urlChain);
+    } else if (chains.length > 0 && !selectedChain) {
+      setSelectedChain(chains[0].id);
+    }
+  }, [chains, selectedChain, searchParams]);
 
   useEffect(() => {
     if (amountMode === "fiat" && amountFiat && parseFloat(amountFiat) > 0) {
@@ -208,5 +214,17 @@ export default function ReceivePage() {
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+export default function ReceivePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+      </div>
+    }>
+      <ReceivePageContent />
+    </Suspense>
   );
 }

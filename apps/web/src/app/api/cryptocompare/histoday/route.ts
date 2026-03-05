@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCryptoCompareSymbol } from "@/lib/coin-symbol";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,13 +54,7 @@ export async function GET(request: NextRequest) {
     const endpoint = days <= 7 ? "histohour" : "histoday";
     const limit = days <= 7 ? Math.min(days * 24, 168) : Math.min(days, 365);
     const url = `${CRYPTOCOMPARE_BASE}/${endpoint}?fsym=${symbol}&tsym=${tsym}&limit=${limit}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
+    const res = await fetchExternal(url, { timeoutMs: 10000 });
     if (!res.ok) {
       return NextResponse.json({ error: "CryptoCompare request failed" }, { status: res.status });
     }

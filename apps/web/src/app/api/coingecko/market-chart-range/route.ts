@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     const fromTs = /^\d+$/.test(from) ? from : Math.floor(new Date(from).getTime() / 1000).toString();
     const toTs = /^\d+$/.test(to) ? to : Math.floor(new Date(to).getTime() / 1000).toString();
     const url = `${COINGECKO_BASE}/coins/${coinId}/market_chart/range?vs_currency=${currency}&from=${fromTs}&to=${toTs}`;
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } });
+    const res = await fetchExternal(url, { timeoutMs: 15000 });
     if (!res.ok) {
       return NextResponse.json({ error: "CoinGecko request failed" }, { status: res.status });
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBinanceSymbol } from "@/lib/coin-symbol";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -56,13 +57,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = `${BINANCE_BASE}/klines?symbol=${symbol}&interval=${interval}&startTime=${startTime}&limit=${limit}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
+    const res = await fetchExternal(url, { timeoutMs: 10000 });
     if (!res.ok) {
       return NextResponse.json({ error: "Binance request failed" }, { status: res.status });
     }

@@ -3,6 +3,8 @@
  * Fetches from CoinGecko when not in static map - supports all existing and future tokens.
  */
 
+import { fetchExternal } from "./fetch-external";
+
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 
 /** Static overrides: CoinGecko id -> exchange symbol (for rebrands, etc.) */
@@ -30,13 +32,7 @@ export async function getSymbolForCoin(coinId: string): Promise<string | null> {
 
   try {
     const url = `${COINGECKO_BASE}/coins/${encodeURIComponent(coinId)}?localization=false&tickers=false&market_data=false&community_data=false&developer_data=false&sparkline=false`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
+    const res = await fetchExternal(url, { timeoutMs: 5000 });
     if (!res.ok) return null;
     const data = (await res.json()) as { symbol?: string };
     const symbol = data.symbol?.toUpperCase?.() ?? null;

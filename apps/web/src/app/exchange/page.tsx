@@ -44,6 +44,9 @@ export default function ExchangePage() {
           </nav>
         </header>
         <div className="mx-auto max-w-6xl px-6 py-8">
+          <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-200/90">
+            {t("legal.riskDisclaimer")}
+          </div>
           <h1 className="text-2xl font-bold text-slate-200">{t("home.exchange.title")}</h1>
           <p className="mt-2 text-slate-400">{t("home.exchange.desc")}</p>
           <div className="mt-8 grid gap-8 lg:grid-cols-2">

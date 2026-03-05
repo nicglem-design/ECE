@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,14 +32,7 @@ export async function GET(request: NextRequest) {
   const rate = FIAT_TO_USD[currency] ?? 1;
   try {
     const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(SYMBOLS))}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, {
-      cache: "no-store",
-      next: { revalidate: 0 },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const res = await fetchExternal(url, { timeoutMs: 8000 });
     if (!res.ok) {
       return NextResponse.json({ error: "Binance request failed" }, { status: res.status });
     }

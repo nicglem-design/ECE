@@ -135,6 +135,10 @@ export default function HomePage() {
       <footer className="border-t border-slate-800/50 py-12">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-slate-500">
           © {new Date().getFullYear()} KanoXchange.com. {t("home.footer")}
+          {" · "}
+          <Link href="/terms" className="text-sky-400 hover:underline">{t("legal.terms")}</Link>
+          {" · "}
+          <Link href="/privacy" className="text-sky-400 hover:underline">{t("legal.privacy")}</Link>
         </div>
       </footer>
     </main>

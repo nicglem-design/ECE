@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,6 +25,10 @@ export default function RegisterPage() {
     const age = Math.floor((today.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
     if (age < 18) {
       setError(t("auth.ageError"));
+      return;
+    }
+    if (!acceptedTerms) {
+      setError(t("auth.acceptTermsError") || "You must accept the Terms of Service and Privacy Policy.");
       return;
     }
     if (password.length < 8) {
@@ -75,6 +80,24 @@ export default function RegisterPage() {
             />
             <p className="mt-1 text-xs text-slate-500">{t("auth.birthDateHint")}</p>
           </div>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500"
+            />
+            <span className="text-sm text-slate-400">
+              {t("auth.acceptTerms")}{" "}
+              <Link href="/terms" className="text-sky-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                {t("legal.terms")}
+              </Link>
+              {" "}&{" "}
+              <Link href="/privacy" className="text-sky-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                {t("legal.privacy")}
+              </Link>
+            </span>
+          </label>
           {error && (
             <p className="text-sm text-red-400">{error}</p>
           )}

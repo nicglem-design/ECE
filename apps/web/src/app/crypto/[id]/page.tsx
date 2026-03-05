@@ -17,6 +17,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getCurrencySymbol } from "@/lib/currencies";
 import { CryptoDetailChart, type ChartRange } from "@/components/CryptoDetailChart";
+import { TokenLogo } from "@/components/TokenLogo";
 
 const COIN_NAMES: Record<string, { symbol: string; name: string }> = {
   bitcoin: { symbol: "BTC", name: "Bitcoin" },
@@ -128,7 +129,7 @@ export default function CryptoDetailPage() {
   // Initial fetch + REST polling (always runs as backup)
   useEffect(() => {
     fetchPrice(true);
-    const idInterval = setInterval(() => fetchPrice(false), 2000);
+    const idInterval = setInterval(() => fetchPrice(false), 5000);
     return () => clearInterval(idInterval);
   }, [fetchPrice]);
 
@@ -168,10 +169,12 @@ export default function CryptoDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
-          <div>
-            <h1 className="text-lg font-semibold text-slate-200 sm:text-xl">
-              {coin.symbol} · {coin.name}
-            </h1>
+          <div className="flex items-center gap-3">
+            <TokenLogo chainId={id} symbol={coin.symbol} size={40} />
+            <div>
+              <h1 className="text-lg font-semibold text-slate-200 sm:text-xl">
+                {coin.symbol} · {coin.name}
+              </h1>
             <p className="text-sm text-slate-500">
               {loading ? "—" : price != null ? formatPrice(price, currency) : "—"}
               {priceChange24h != null && (
@@ -180,6 +183,7 @@ export default function CryptoDetailPage() {
                 </span>
               )}
             </p>
+            </div>
           </div>
         </div>
       </header>

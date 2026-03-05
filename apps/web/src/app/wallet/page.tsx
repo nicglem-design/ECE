@@ -53,7 +53,7 @@ export default function WalletPage() {
 
   useEffect(() => {
     fetchTotal();
-    const id = setInterval(fetchTotal, 2000); // Live prices every 2s
+    const id = setInterval(fetchTotal, 5000); // Live prices every 5s
     return () => clearInterval(id);
   }, [fetchTotal]);
 
@@ -64,6 +64,9 @@ export default function WalletPage() {
       <main className="min-h-screen bg-slate-950">
         <WalletNav />
         <div className="mx-auto max-w-6xl px-6 py-8">
+          <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-200/90">
+            {t("legal.riskDisclaimer")}
+          </div>
           <h1 className="text-2xl font-bold text-slate-200">{t("wallet.title")}</h1>
           <p className="mt-2 text-slate-400">{t("wallet.subtitle")}</p>
           {error ? (

@@ -8,7 +8,7 @@ import {
   parseMiniTickerEvent,
 } from "@/lib/binance-format";
 
-const POLL_MS = 1000; // 1s - Binance miniTicker update speed
+const POLL_MS = 5000; // 5s - reduces API load while keeping prices fresh
 
 export type PriceStreamData = {
   prices: Record<string, number>;

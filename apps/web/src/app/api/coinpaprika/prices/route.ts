@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchExternal } from "@/lib/fetch-external";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,10 +31,9 @@ export async function GET(request: NextRequest) {
   try {
     const results = await Promise.all(
       TOP_5_IDS.map((id) =>
-        fetch(`${COINPAPRIKA_BASE}/tickers/${id}?quotes=${quoteCurrency}`, {
-          cache: "no-store",
-          next: { revalidate: 0 },
-        }).then((r) => (r.ok ? r.json() : null))
+        fetchExternal(`${COINPAPRIKA_BASE}/tickers/${id}?quotes=${quoteCurrency}`).then((r) =>
+          r.ok ? r.json() : null
+        )
       )
     );
     const prices: Record<string, number> = {};

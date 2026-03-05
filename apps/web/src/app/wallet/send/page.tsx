@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWalletChains, useWalletBalances } from "@/hooks/useWallet";
@@ -13,10 +13,11 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { getPrice } from "@/lib/coingecko";
 import { apiPost } from "@/lib/apiClient";
 
-export default function SendPage() {
+function SendPageContent() {
   const { t } = useLanguage();
   const { isAuthenticated, logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currency } = useCurrency();
   useEffect(() => { setFiatCurrency(currency || "usd"); }, [currency]);
   const { chains, loading: chainsLoading } = useWalletChains();
@@ -34,8 +35,13 @@ export default function SendPage() {
   const chainOptions = chains.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
 
   useEffect(() => {
-    if (chains.length > 0 && !chainId) setChainId(chains[0].id);
-  }, [chains, chainId]);
+    const urlChain = searchParams.get("chain") ?? "";
+    if (urlChain && chains.some((c) => c.id === urlChain)) {
+      setChainId(urlChain);
+    } else if (chains.length > 0 && !chainId) {
+      setChainId(chains[0].id);
+    }
+  }, [chains, chainId, searchParams]);
 
   useEffect(() => {
     if (amountMode === "fiat" && amountFiat && parseFloat(amountFiat) > 0 && chainId) {
@@ -210,5 +216,17 @@ export default function SendPage() {
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+export default function SendPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+      </div>
+    }>
+      <SendPageContent />
+    </Suspense>
   );
 }

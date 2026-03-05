@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useWalletBalances, useWalletChains, useWalletTransactions } from "@/hooks/useWallet";
+import { useWalletBalances } from "@/hooks/useWallet";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
 import { PortfolioChart } from "@/components/PortfolioChart";
@@ -18,50 +18,32 @@ import {
   CHAIN_TO_COINGECKO,
 } from "@/lib/coingecko";
 import { PriceSparklineChart } from "@/components/PriceSparklineChart";
+import { TokenLogo } from "@/components/TokenLogo";
 import { SPARKLINE_WIDTH, SPARKLINE_HEIGHT, SPARKLINE_DAYS } from "@/lib/chart-config";
 
 function AssetSparkline({
-  chainId,
+  prices,
   price: knownPrice,
+  chainId,
 }: {
-  chainId: string;
+  prices: number[];
   price?: number;
+  chainId: string;
 }) {
-  const { currency } = useCurrency();
-  const [prices, setPrices] = useState<number[]>([]);
-
-  useEffect(() => {
-    const cgId = CHAIN_TO_COINGECKO[chainId] ?? chainId;
-    fetchMarketChartForDetail(cgId, currency || "usd", SPARKLINE_DAYS)
-      .then(({ prices: points }) => {
-        const arr = pricePointsToArray(points);
-        if (arr.length >= 2) {
-          setPrices(arr);
-        } else {
-          const fallbackPrice =
-            knownPrice != null && knownPrice > 0
-              ? knownPrice
-              : getFallbackPriceForCoin(cgId, currency || "usd");
-          setPrices(generateFallbackSparkline(fallbackPrice, 48));
-        }
-      })
-      .catch(() => {
-        const fallbackPrice =
-          knownPrice != null && knownPrice > 0
-            ? knownPrice
-            : getFallbackPriceForCoin(cgId, currency || "usd");
-        setPrices(generateFallbackSparkline(fallbackPrice, 48));
-      });
-  }, [chainId, currency, knownPrice]);
-
+  const displayPrices =
+    prices.length >= 2
+      ? prices
+      : knownPrice != null && knownPrice > 0
+        ? generateFallbackSparkline(knownPrice, 48)
+        : prices;
   const change24h =
-    prices.length >= 2 && prices[0] > 0
-      ? ((prices[prices.length - 1] - prices[0]) / prices[0]) * 100
+    displayPrices.length >= 2 && displayPrices[0] > 0
+      ? ((displayPrices[displayPrices.length - 1] - displayPrices[0]) / displayPrices[0]) * 100
       : null;
 
   return (
     <PriceSparklineChart
-      prices={prices}
+      prices={displayPrices}
       change24h={change24h}
       width={SPARKLINE_WIDTH}
       height={SPARKLINE_HEIGHT}
@@ -73,13 +55,11 @@ export default function PortfolioPage() {
   const { t } = useLanguage();
   const { currency } = useCurrency();
   const { assets, loading } = useWalletBalances();
-  const { chains } = useWalletChains();
-  const [selectedChain, setSelectedChain] = useState("");
-  const { transactions, explorerTx, loading: txLoading } = useWalletTransactions(selectedChain || null);
   const [totalValue, setTotalValue] = useState(0);
   const [changePct, setChangePct] = useState<number | null>(null);
   const [assetValues, setAssetValues] = useState<Record<string, number>>({});
   const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
+  const [assetSparklines, setAssetSparklines] = useState<Record<string, number[]>>({});
 
   const onTotalChange = useCallback((total: number, change: number | null) => {
     setTotalValue(total);
@@ -107,16 +87,39 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     fetchAssetPrices();
-    const id = setInterval(fetchAssetPrices, 2000); // Live prices every 2s
+    const id = setInterval(fetchAssetPrices, 5000); // Live prices every 5s
     return () => clearInterval(id);
   }, [fetchAssetPrices]);
 
+  // Fetch sparklines for all assets once (deduplicated - was N fetches, now 1 batch)
   useEffect(() => {
-    if (assets.length > 0 && !selectedChain) setSelectedChain(assets[0].chainId);
-    else if (chains.length > 0 && !selectedChain) setSelectedChain(chains[0].id);
-  }, [assets, chains, selectedChain]);
+    if (assets.length === 0) {
+      setAssetSparklines({});
+      return;
+    }
+    const fiat = (currency || "usd").toLowerCase();
+    const fetchAll = assets.map(async (a) => {
+      const cgId = CHAIN_TO_COINGECKO[a.chainId] ?? a.chainId;
+      try {
+        const { prices: points } = await fetchMarketChartForDetail(cgId, fiat, SPARKLINE_DAYS);
+        const arr = pricePointsToArray(points);
+        if (arr.length >= 2) return { chainId: a.chainId, prices: arr };
+        const fallbackPrice = getFallbackPriceForCoin(cgId, fiat);
+        return { chainId: a.chainId, prices: generateFallbackSparkline(fallbackPrice, 48) };
+      } catch {
+        const fallbackPrice = getFallbackPriceForCoin(cgId, fiat);
+        return { chainId: a.chainId, prices: generateFallbackSparkline(fallbackPrice, 48) };
+      }
+    });
+    Promise.all(fetchAll).then((results) => {
+      const next: Record<string, number[]> = {};
+      results.forEach((r) => {
+        next[r.chainId] = r.prices;
+      });
+      setAssetSparklines(next);
+    });
+  }, [assets, currency]);
 
-  const chainSymbol = assets.find((a) => a.chainId === selectedChain)?.symbol ?? selectedChain;
   const sym = getCurrencySymbol(currency || "usd");
 
   return (
@@ -154,81 +157,38 @@ export default function PortfolioPage() {
               </div>
               <div className="mt-8 space-y-4">
                 {assets.map((a) => (
-                  <div
+                  <Link
                     key={a.chainId}
-                    className="flex items-center justify-between gap-6 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+                    href={`/wallet/portfolio/asset/${encodeURIComponent(a.chainId)}`}
+                    className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4 transition hover:border-slate-600 hover:bg-slate-800/50"
                   >
-                    <div className="min-w-0 shrink-0">
-                      <span className="font-medium text-slate-200">{a.symbol}</span>
-                      <span className="ml-2 text-sm text-slate-500">{a.name}</span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-4">
-                      <AssetSparkline chainId={a.chainId} price={assetPrices[a.chainId]} />
-                      <div className="flex min-w-[100px] flex-col items-end">
-                        <span className="font-mono text-slate-200">
-                          {sym} {(assetValues[a.chainId] ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
+                    <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
+                      <TokenLogo chainId={a.chainId} symbol={a.symbol} size={32} />
+                      <div className="min-w-0">
+                        <span className="font-medium text-slate-200">{a.symbol}</span>
+                        <span className="ml-2 truncate text-sm text-slate-500">{a.name}</span>
                       </div>
                     </div>
-                  </div>
+                    <div className="flex flex-shrink-0 justify-center" style={{ width: SPARKLINE_WIDTH }}>
+                      <AssetSparkline
+                        chainId={a.chainId}
+                        price={assetPrices[a.chainId]}
+                        prices={assetSparklines[a.chainId] ?? []}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
+                      <span className="font-mono text-slate-200">
+                        {sym} {(assetValues[a.chainId] ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <svg className="h-5 w-5 shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </>
           )}
-          <div className="mt-12">
-            <h2 className="text-lg font-semibold text-slate-200">{t("portfolio.transactionHistory")}</h2>
-            {chains.length > 0 && (
-              <div className="mt-4">
-                <label className="block text-sm text-slate-400">{t("receive.chooseAsset")}</label>
-                <select
-                  value={selectedChain}
-                  onChange={(e) => setSelectedChain(e.target.value)}
-                  className="mt-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-slate-200"
-                >
-                  {chains.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.symbol})
-                    </option>
-                  ))}
-                </select>
-                {txLoading ? (
-                  <p className="mt-4 text-slate-500">{t("common.loading")}</p>
-                ) : transactions.length === 0 ? (
-                  <p className="mt-4 text-slate-500">{t("portfolio.noTransactions")}</p>
-                ) : (
-                  <div className="mt-4 space-y-2">
-                    {transactions.slice(0, 10).map((tx, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 p-3"
-                      >
-                        <div>
-                          <span
-                            className={`text-sm font-medium ${
-                              tx.type === "received" ? "text-green-400" : "text-amber-400"
-                            }`}
-                          >
-                            {tx.type === "received" ? t("portfolio.received") : t("portfolio.sent")}
-                          </span>
-                          <span className="ml-2 font-mono text-slate-400">
-                            {tx.amount} {chainSymbol}
-                          </span>
-                        </div>
-                        <a
-                          href={explorerTx + tx.txHash}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-sky-400 hover:underline"
-                        >
-                          {t("portfolio.viewOnExplorer")}
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
           <Link href="/wallet" className="mt-6 inline-block text-sky-400 hover:underline">
             {t("portfolio.backToWallet")}
           </Link>
