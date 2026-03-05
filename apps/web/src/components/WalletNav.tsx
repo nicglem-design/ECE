@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { TerminologyToggle } from "./TerminologyToggle";
@@ -11,6 +11,8 @@ export function WalletNav() {
   const { t } = useLanguage();
   const { isAuthenticated, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname() ?? "";
+  const isWallet = pathname === "/wallet" || pathname.startsWith("/wallet/") || pathname === "/dashboard";
 
   return (
     <header className="border-b border-slate-800/50">
@@ -19,7 +21,10 @@ export function WalletNav() {
           {t("nav.kanox")}
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/wallet" className="text-sm text-slate-400 hover:text-sky-400">
+          <Link
+            href="/wallet"
+            className={`text-sm ${isWallet ? "text-sky-400" : "text-slate-400 hover:text-sky-400"}`}
+          >
             {t("nav.wallet")}
           </Link>
           <Link href="/wallet/portfolio" className="text-sm text-slate-400 hover:text-sky-400">

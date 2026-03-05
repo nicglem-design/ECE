@@ -5,54 +5,54 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --theme-bg: 2 6 23;
-  --theme-bg-elevated: 15 23 42;
-  --theme-bg-muted: 30 41 59;
-  --theme-text: 241 245 249;
-  --theme-text-muted: 148 163 184;
-  --theme-border: 51 65 85;
-  --theme-accent: 14 165 233;
-  --theme-accent-hover: 56 189 248;
-  --theme-accent-muted: 14 165 233;
+  --theme-bg: 2, 6, 23;
+  --theme-bg-elevated: 15, 23, 42;
+  --theme-bg-muted: 30, 41, 59;
+  --theme-text: 241, 245, 249;
+  --theme-text-muted: 148, 163, 184;
+  --theme-border: 51, 65, 85;
+  --theme-accent: 14, 165, 233;
+  --theme-accent-hover: 56, 189, 248;
+  --theme-accent-muted: 14, 165, 233;
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --theme-bg: 248 250 252;
-  --theme-bg-elevated: 241 245 249;
-  --theme-bg-muted: 226 232 240;
-  --theme-text: 15 23 42;
-  --theme-text-muted: 100 116 139;
-  --theme-border: 203 213 225;
-  --theme-accent: 14 165 233;
-  --theme-accent-hover: 2 132 199;
-  --theme-accent-muted: 56 189 248;
+  --theme-bg: 248, 250, 252;
+  --theme-bg-elevated: 241, 245, 249;
+  --theme-bg-muted: 226, 232, 240;
+  --theme-text: 15, 23, 42;
+  --theme-text-muted: 100, 116, 139;
+  --theme-border: 203, 213, 225;
+  --theme-accent: 14, 165, 233;
+  --theme-accent-hover: 2, 132, 199;
+  --theme-accent-muted: 56, 189, 248;
 }
 
 [data-theme="blue"] {
   color-scheme: dark;
-  --theme-bg: 3 7 18;
-  --theme-bg-elevated: 15 23 42;
-  --theme-bg-muted: 30 41 59;
-  --theme-text: 241 245 249;
-  --theme-text-muted: 148 163 184;
-  --theme-border: 51 65 85;
-  --theme-accent: 59 130 246;
-  --theme-accent-hover: 96 165 250;
-  --theme-accent-muted: 59 130 246;
+  --theme-bg: 3, 7, 18;
+  --theme-bg-elevated: 15, 23, 42;
+  --theme-bg-muted: 30, 41, 59;
+  --theme-text: 241, 245, 249;
+  --theme-text-muted: 148, 163, 184;
+  --theme-border: 51, 65, 85;
+  --theme-accent: 59, 130, 246;
+  --theme-accent-hover: 96, 165, 250;
+  --theme-accent-muted: 59, 130, 246;
 }
 
 [data-theme="amber"] {
   color-scheme: dark;
-  --theme-bg: 7 5 3;
-  --theme-bg-elevated: 23 20 15;
-  --theme-bg-muted: 59 48 41;
-  --theme-text: 254 252 232;
-  --theme-text-muted: 180 166 130;
-  --theme-border: 85 65 51;
-  --theme-accent: 245 158 11;
-  --theme-accent-hover: 251 191 36;
-  --theme-accent-muted: 245 158 11;
+  --theme-bg: 7, 5, 3;
+  --theme-bg-elevated: 23, 20, 15;
+  --theme-bg-muted: 59, 48, 41;
+  --theme-text: 254, 252, 232;
+  --theme-text-muted: 180, 166, 130;
+  --theme-border: 85, 65, 51;
+  --theme-accent: 245, 158, 11;
+  --theme-accent-hover: 251, 191, 36;
+  --theme-accent-muted: 245, 158, 11;
 }
 
 :root {
@@ -62,8 +62,8 @@
 }
 
 body {
-  background-color: rgb(var(--theme-bg));
-  color: rgb(var(--theme-text));
+  background-color: #020617;
+  color: #f1f5f9;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

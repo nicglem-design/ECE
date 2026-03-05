@@ -24,6 +24,18 @@ export function getCached<T>(route: string, params: string): T | null {
   return entry.data;
 }
 
+/** Get cached data with custom TTL (ms) - for routes that need longer/shorter cache */
+export function getCachedWithTTL<T>(
+  route: string,
+  params: string,
+  ttlMs: number
+): T | null {
+  const entry = cache.get(key(route, params)) as CacheEntry<T> | undefined;
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > ttlMs) return null;
+  return entry.data;
+}
+
 /** Get stale cache (for 429 fallback) - returns data even if expired, within STALE_TTL */
 export function getStaleCached<T>(route: string, params: string): T | null {
   const entry = cache.get(key(route, params)) as CacheEntry<T> | undefined;

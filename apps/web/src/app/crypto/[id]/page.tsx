@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -45,6 +45,7 @@ function formatPrice(price: number, currencyId: string): string {
 
 export default function CryptoDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { currency } = useCurrency();
   const { t } = useLanguage();
   const { prices: wsPrices, priceChange24h: wsChange24h } = usePriceStream(currency);
@@ -160,15 +161,16 @@ export default function CryptoDetailPage() {
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-800/50 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
+          <button
+            type="button"
+            onClick={() => router.back()}
             className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800/50 text-slate-400 transition hover:bg-slate-700 hover:text-slate-200"
             aria-label={t("common.back") || "Back"}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-          </Link>
+          </button>
           <div className="flex items-center gap-3">
             <TokenLogo chainId={id} symbol={coin.symbol} size={40} />
             <div>

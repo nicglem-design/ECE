@@ -19,7 +19,7 @@ export default function WalletPage() {
   const { isPro } = useTerminology();
   const { isAuthenticated } = useAuth();
   const { currency } = useCurrency();
-  const { assets, loading, error } = useWalletBalances();
+  const { assets, loading, error, refetch } = useWalletBalances();
   const { setOpen: setAskKanoOpen } = useAskKano();
   const [totalValue, setTotalValue] = useState<number | null>(null);
   const [allTimePct, setAllTimePct] = useState<number | null>(null);
@@ -98,6 +98,12 @@ export default function WalletPage() {
               <p className="mt-2 text-sm text-slate-400">
                 {t("wallet.apiErrorHint") || "Make sure you're logged in and the API is running."}
               </p>
+              <button
+                onClick={() => refetch()}
+                className="mt-4 rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600"
+              >
+                {t("common.tryAgain") || "Try again"}
+              </button>
             </div>
           ) : loading ? (
             <p className="mt-6 text-slate-500">{t("common.loading")}</p>

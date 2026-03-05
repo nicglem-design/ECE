@@ -8,6 +8,7 @@ import { useWalletBalances } from "@/hooks/useWallet";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
 import { TopCryptoWidget } from "@/components/TopCryptoWidget";
+import { PopularCryptoWidget } from "@/components/PopularCryptoWidget";
 import { DashboardReceiveWidget } from "@/components/DashboardReceiveWidget";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { getCurrencySymbol } from "@/lib/currencies";
@@ -80,8 +81,9 @@ export default function DashboardPage() {
           <div className="mt-8">
             <DashboardReceiveWidget />
           </div>
-          <div className="mt-8">
+          <div className="mt-8 space-y-8">
             <TopCryptoWidget />
+            <PopularCryptoWidget />
           </div>
         </div>
       </main>

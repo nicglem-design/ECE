@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { TopCryptoWidget } from "@/components/TopCryptoWidget";
+import { CryptoListWidget } from "@/components/CryptoListWidget";
+import { PopularCryptoWidget } from "@/components/PopularCryptoWidget";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
 
 export default function ExchangePage() {
@@ -72,8 +73,9 @@ export default function ExchangePage() {
           <h1 className="text-2xl font-bold text-slate-200">{t("home.exchange.title")}</h1>
           <p className="mt-2 text-slate-400">{t("home.exchange.desc")}</p>
           <div className="mt-8 grid gap-8 lg:grid-cols-2">
-            <div>
-              <TopCryptoWidget />
+            <div className="space-y-6">
+              <CryptoListWidget />
+              <PopularCryptoWidget />
             </div>
             <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
               <h2 className="text-lg font-semibold text-slate-200">Swap (coming soon)</h2>

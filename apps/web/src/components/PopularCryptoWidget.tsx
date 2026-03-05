@@ -6,18 +6,18 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getCurrencySymbol } from "@/lib/currencies";
 import { PriceSparklineChart } from "@/components/PriceSparklineChart";
-import { TokenLogo } from "@/components/TokenLogo";
 import { SPARKLINE_WIDTH, SPARKLINE_HEIGHT } from "@/lib/chart-config";
 import {
   generateFallbackSparkline,
   generateTrendSparkline,
   fetchMarketChartViaAPI,
 } from "@/lib/coingecko";
+import { TokenLogo } from "@/components/TokenLogo";
 
-const PRICE_POLL_MS = 3000; // Real-time price updates every 3 seconds
+const POLL_MS = 5000;
 const SPARKLINE_POLL_MS = 60000;
 
-interface TopCoin {
+interface TrendingCoin {
   id: string;
   symbol: string;
   name: string;
@@ -34,11 +34,12 @@ function formatPrice(price: number, currencyId: string): string {
   return `${sym} ${rounded.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
-export function TopCryptoWidget() {
+export function PopularCryptoWidget() {
   const { currency } = useCurrency();
   const { t } = useLanguage();
-  const [coins, setCoins] = useState<TopCoin[]>([]);
+  const [coins, setCoins] = useState<TrendingCoin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orderbookActive, setOrderbookActive] = useState(false);
   const fetchingRef = useRef(false);
   const sparklineFetchingRef = useRef(false);
 
@@ -59,16 +60,16 @@ export function TopCryptoWidget() {
     };
     let data: CoinItem[] = [];
     try {
-      const mcapRes = await fetch(
-        `${base}/api/coingecko/top-by-market-cap?currency=${encodeURIComponent(fiat)}&_=${ts}`
+      const volumeRes = await fetch(
+        `${base}/api/coingecko/popular-by-volume?currency=${encodeURIComponent(fiat)}&_=${ts}`
       );
-      if (mcapRes.ok) {
-        const parsed = (await mcapRes.json()) as CoinItem[] | { error?: string };
+      if (volumeRes.ok) {
+        const parsed = (await volumeRes.json()) as CoinItem[] | { error?: string };
         if (Array.isArray(parsed) && parsed.length > 0) data = parsed;
       }
       if (data.length === 0) {
         const fallbackRes = await fetch(
-          `${base}/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&per_page=5&page=1&sparkline=true&order=market_cap_desc&_=${ts}`
+          `${base}/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&per_page=5&page=1&sparkline=true&order=volume_desc&_=${ts}`
         );
         if (fallbackRes.ok) {
           const fallback = (await fallbackRes.json()) as CoinItem[] | { error?: string };
@@ -90,14 +91,18 @@ export function TopCryptoWidget() {
           const mData = (await mRes.json()) as {
             prices?: Record<string, number>;
             priceChange24h?: Record<string, number>;
+            source?: string;
           };
           marketPrices = mData.prices ?? {};
           marketChange = mData.priceChange24h ?? {};
+          setOrderbookActive(mData.source === "orderbook");
+        } else {
+          setOrderbookActive(false);
         }
       } catch {
-        /* ignore */
+        setOrderbookActive(false);
       }
-      const list: TopCoin[] = data.map((c) => {
+      const list: TrendingCoin[] = data.map((c) => {
         const spark7d = (c.sparkline_in_7d?.price ?? []) as number[];
         const sparkline = spark7d.length >= 2 ? spark7d : [];
         const price = marketPrices[c.id] ?? c.current_price ?? 0;
@@ -127,34 +132,6 @@ export function TopCryptoWidget() {
       fetchingRef.current = false;
     }
   }, [currency]);
-
-  const fetchPricesOnly = useCallback(async () => {
-    if (coins.length === 0) return;
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    const fiat = (currency || "usd").toLowerCase();
-    const ids = coins.map((c) => c.id);
-    try {
-      const mRes = await fetch(
-        `${base}/api/market/prices?currency=${encodeURIComponent(fiat)}&ids=${ids.join(",")}&_=${Date.now()}`
-      );
-      if (!mRes.ok) return;
-      const mData = (await mRes.json()) as {
-        prices?: Record<string, number>;
-        priceChange24h?: Record<string, number>;
-      };
-      const marketPrices = mData.prices ?? {};
-      const marketChange = mData.priceChange24h ?? {};
-      setCoins((prev) =>
-        prev.map((c) => ({
-          ...c,
-          price: marketPrices[c.id] ?? c.price,
-          priceChange24h: marketChange[c.id] != null ? marketChange[c.id] : c.priceChange24h,
-        }))
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [currency, coins]);
 
   const fetchSparklines = useCallback(async () => {
     if (sparklineFetchingRef.current || coins.length === 0) return;
@@ -196,10 +173,10 @@ export function TopCryptoWidget() {
 
   useEffect(() => {
     if (coins.length === 0) return;
-    const id = setInterval(fetchPricesOnly, PRICE_POLL_MS);
-    fetchPricesOnly();
+    const id = setInterval(fetchData, POLL_MS);
+    fetchData();
     return () => clearInterval(id);
-  }, [fetchPricesOnly, coins.length]);
+  }, [fetchData, coins.length]);
 
   useEffect(() => {
     if (coins.length === 0) return;
@@ -211,10 +188,13 @@ export function TopCryptoWidget() {
   if (loading && coins.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
-        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
+        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.popularCrypto")}</h2>
         <div className="mt-4 space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl py-3 px-4 animate-pulse">
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-lg border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl py-3 px-4 animate-pulse"
+            >
               <div className="h-5 w-24 rounded bg-slate-700" />
               <div className="h-5 w-20 rounded bg-slate-700" />
             </div>
@@ -227,17 +207,17 @@ export function TopCryptoWidget() {
   return (
     <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
+        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.popularCrypto")}</h2>
         <span
           className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400"
-          title="Live prices from CoinGecko"
+          title={orderbookActive ? "Live from order book (active users)" : "Live prices from CoinGecko"}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" aria-hidden />
           Live
         </span>
       </div>
       <p className="mt-1 text-sm text-slate-500">
-        {t("dashboard.livePrices")} {getCurrencySymbol(currency)} · {t("dashboard.byMarketCap")}
+        {t("dashboard.livePrices")} {getCurrencySymbol(currency)} · {t("dashboard.byVolume")}
       </p>
       <div className="mt-4 space-y-2">
         {coins.length === 0 ? (
@@ -280,7 +260,6 @@ export function TopCryptoWidget() {
                     </span>
                     <TokenLogo chainId={c.id} symbol={c.symbol} size={28} />
                     <span className="shrink-0 font-medium text-slate-200">{c.symbol}</span>
-                    <span className="truncate text-sm text-slate-500">{c.name}</span>
                   </div>
                   <div className="flex flex-shrink-0 justify-center" style={{ width: SPARKLINE_WIDTH }}>
                     <PriceSparklineChart

@@ -41,12 +41,16 @@ export interface OrderBookSnapshot {
   lastTradeTime: number | null;
 }
 
-/** CoinGecko id -> trading pair symbol */
+/** CoinGecko id -> trading pair symbol. Extended for Popular 5 (trending) - orderbook used when active users. */
 export const COIN_TO_PAIR: Record<string, string> = {
   bitcoin: "BTCUSDT",
   ethereum: "ETHUSDT",
   binancecoin: "BNBUSDT",
   solana: "SOLUSDT",
+  dogecoin: "DOGEUSDT",
+  pepe: "PEPEUSDT",
+  "bonk": "BONKUSDT",
+  "shiba-inu": "SHIBUSDT",
 };
 
 export const PAIR_TO_COIN: Record<string, string> = {
@@ -54,4 +58,8 @@ export const PAIR_TO_COIN: Record<string, string> = {
   ETHUSDT: "ethereum",
   BNBUSDT: "binancecoin",
   SOLUSDT: "solana",
+  DOGEUSDT: "dogecoin",
+  PEPEUSDT: "pepe",
+  BONKUSDT: "bonk",
+  SHIBUSDT: "shiba-inu",
 };
