@@ -25,7 +25,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem("kanox_theme")||"dark";document.documentElement.setAttribute("data-theme",t);var l=localStorage.getItem("kanox_language");if(!l){var n=(navigator.language||"").split("-")[0].toLowerCase();var s=["en","sv","no","da","de","fr","es","it","pt","nl","pl","fi","cs","hu","ro","bg","hr","sk","sl","el","ru","uk","tr","ar","he","zh","ja","ko","th","vi","id","ms","hi","bn","ta","te","mr","gu","kn","ml","pa","fa","ur","sw","am","af","ca","eu","gl","et","lv","lt","sr","mk","sq","bs","mt","cy","ga","is"];l=s.indexOf(n)>=0?n:"en";localStorage.setItem("kanox_language",l)}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("kanox_theme")||"dark";document.documentElement.setAttribute("data-theme",t);var l=localStorage.getItem("kanox_language");if(!l){var n=(navigator.language||"").split("-")[0].toLowerCase();var s=["en","sv","no","da","de","fr","es","it","pt","nl","pl","fi","cs","hu","ro","bg","hr","sk","sl","el","ru","uk","tr","ar","he","zh","ja","ko","th","vi","id","ms","hi","bn","ta","te","mr","gu","kn","ml","pa","fa","ur","sw","am","af","ca","eu","gl","et","lv","lt","sr","mk","sq","bs","mt","cy","ga","is"];l=s.indexOf(n)>=0?n:"en";localStorage.setItem("kanox_language",l)}}catch(e){}})();`,
           }}
         />
       </head>

@@ -242,6 +242,34 @@ export async function getPricesBatch(
   return out;
 }
 
+/**
+ * Get price for a single asset. Uses orderbook when site has active users (via /api/market/prices),
+ * otherwise falls back to getPricesBatch. Use this for the asset detail page price-per-token display.
+ */
+export async function getPriceForAsset(
+  chainId: string,
+  fiatId: string
+): Promise<number | null> {
+  const cgId = CHAIN_TO_COINGECKO[chainId] ?? chainId;
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  try {
+    const res = await fetch(
+      `${base}/api/market/prices?currency=${encodeURIComponent(fiatId || "usd")}`,
+      { cache: "no-store", headers: { "Cache-Control": "no-cache", Pragma: "no-cache" } }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { prices?: Record<string, number>; source?: string };
+      const price = data.prices?.[cgId] ?? data.prices?.[chainId];
+      if (price != null && price > 0) return price;
+    }
+  } catch {
+    // Fall through to getPricesBatch
+  }
+  const batch = await getPricesBatch([chainId], fiatId || "usd");
+  const p = batch[chainId] ?? 0;
+  return p > 0 ? p : null;
+}
+
 const TOP_5_COINS = [
   { id: "bitcoin", symbol: "BTC", name: "Bitcoin" },
   { id: "ethereum", symbol: "ETH", name: "Ethereum" },

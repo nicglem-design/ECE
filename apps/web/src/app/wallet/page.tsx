@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTerminology } from "@/contexts/TerminologyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWalletBalances } from "@/hooks/useWallet";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -15,12 +16,23 @@ import { getPricesBatch } from "@/lib/coingecko";
 
 export default function WalletPage() {
   const { t } = useLanguage();
+  const { isPro } = useTerminology();
   const { isAuthenticated } = useAuth();
   const { currency } = useCurrency();
   const { assets, loading, error } = useWalletBalances();
   const { setOpen: setAskKanoOpen } = useAskKano();
   const [totalValue, setTotalValue] = useState<number | null>(null);
   const [allTimePct, setAllTimePct] = useState<number | null>(null);
+  const [riskDisclaimerDismissed, setRiskDisclaimerDismissed] = useState(false);
+
+  useEffect(() => {
+    setRiskDisclaimerDismissed(localStorage.getItem("kanox_risk_disclaimer_dismissed") === "1");
+  }, []);
+
+  const dismissRiskDisclaimer = () => {
+    localStorage.setItem("kanox_risk_disclaimer_dismissed", "1");
+    setRiskDisclaimerDismissed(true);
+  };
 
   const fetchTotal = useCallback(() => {
     if (assets.length === 0) {
@@ -64,11 +76,22 @@ export default function WalletPage() {
       <main className="min-h-screen bg-slate-950">
         <WalletNav />
         <div className="mx-auto max-w-6xl px-6 py-8">
-          <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-200/90">
-            {t("legal.riskDisclaimer")}
-          </div>
+          {!riskDisclaimerDismissed && (
+            <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-800/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-200/90">
+              <p className="flex-1">{t("legal.riskDisclaimer")}</p>
+              <button
+                onClick={dismissRiskDisclaimer}
+                aria-label="Dismiss"
+                className="shrink-0 rounded p-1 text-amber-400/80 transition hover:bg-amber-800/30 hover:text-amber-200"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-slate-200">{t("wallet.title")}</h1>
-          <p className="mt-2 text-slate-400">{t("wallet.subtitle")}</p>
+          <p className="mt-2 text-slate-400">{isPro ? t("wallet.subtitlePro") : t("wallet.subtitleSimple")}</p>
           {error ? (
             <div className="mt-6 rounded-xl border border-red-800/50 bg-red-900/20 p-4">
               <p className="text-red-400">{error}</p>
@@ -80,34 +103,46 @@ export default function WalletPage() {
             <p className="mt-6 text-slate-500">{t("common.loading")}</p>
           ) : (
             <>
-              <button
-                onClick={() => setAskKanoOpen(true)}
-                className="mt-8 flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 p-4 text-left transition hover:border-sky-500/50"
-              >
-                <div>
-                  <h3 className="font-medium text-sky-400">{t("wallet.askKano")}</h3>
-                  <p className="mt-1 text-sm text-slate-400">{t("wallet.askKanoDesc")}</p>
-                </div>
-              </button>
+              {!isPro && (
+                <button
+                  onClick={() => setAskKanoOpen(true)}
+                  className="mt-8 flex w-full items-center justify-between rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4 text-left transition hover:border-sky-500/30 hover:bg-slate-800/30"
+                >
+                  <div>
+                    <h3 className="font-medium text-sky-400">{t("wallet.askKano")}</h3>
+                    <p className="mt-1 text-sm text-slate-400">{t("wallet.askKanoDesc")}</p>
+                  </div>
+                </button>
+              )}
               <Link
                 href="/wallet/portfolio"
-                className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition hover:border-sky-500/50"
+                className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6 transition hover:border-sky-500/30 hover:bg-slate-800/30"
               >
-                <span className="shrink-0 text-slate-400">{t("wallet.totalBalance")}</span>
+                <div className="shrink-0">
+                  <span className="block text-slate-400">{t("wallet.totalBalance")}</span>
+                  {!isPro && (
+                    <span className="mt-1 block text-xs text-slate-500">{t("wallet.totalBalanceHint")}</span>
+                  )}
+                </div>
                 <span className="flex-1 text-center font-mono text-xl font-semibold text-slate-200">
                   {totalValue != null ? `${sym} ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                 </span>
-                <div className="flex shrink-0 items-center gap-2 text-right">
+                <div className="flex shrink-0 flex-col items-end text-right">
                   {allTimePct != null && (
                     <>
-                      <span className="text-slate-500">{t("wallet.allTime")}</span>
-                      <span
-                        className={`font-mono font-semibold ${
-                          allTimePct > 0 ? "text-green-400" : allTimePct < 0 ? "text-red-400" : "text-slate-500"
-                        }`}
-                      >
-                        {allTimePct > 0 ? "+" : ""}{allTimePct.toFixed(2)}%
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500">{t("wallet.allTime")}</span>
+                        <span
+                          className={`font-mono font-semibold ${
+                            allTimePct > 0 ? "text-green-400" : allTimePct < 0 ? "text-red-400" : "text-slate-500"
+                          }`}
+                        >
+                          {allTimePct > 0 ? "+" : ""}{allTimePct.toFixed(2)}%
+                        </span>
+                      </div>
+                      {!isPro && (
+                        <span className="mt-1 block text-xs text-slate-500">{t("wallet.allTimeHint")}</span>
+                      )}
                     </>
                   )}
                 </div>
@@ -115,7 +150,7 @@ export default function WalletPage() {
               <div className="mt-6 grid grid-cols-2 gap-6">
                 <Link
                   href="/wallet/send"
-                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center transition hover:border-sky-500/50"
+                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-sky-500/30 hover:bg-slate-800/30"
                 >
                   <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/20">
                     <svg className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -127,7 +162,7 @@ export default function WalletPage() {
                 </Link>
                 <Link
                   href="/wallet/receive"
-                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center transition hover:border-sky-500/50"
+                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-sky-500/30 hover:bg-slate-800/30"
                 >
                   <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/20">
                     <svg className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -139,7 +174,7 @@ export default function WalletPage() {
                 </Link>
                 <Link
                   href="/exchange"
-                  className="col-span-2 flex min-h-[100px] flex-col items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center transition hover:border-amber-500/50"
+                  className="col-span-2 flex min-h-[100px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-amber-500/30 hover:bg-slate-800/30"
                 >
                   <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/20">
                     <svg className="h-6 w-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

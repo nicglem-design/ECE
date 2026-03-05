@@ -51,7 +51,7 @@ export default function DashboardPage() {
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("kano-open"))}
             type="button"
-            className="mt-8 flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 p-4 text-left transition hover:border-sky-500/50"
+            className="mt-8 flex w-full items-center justify-between rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4 text-left transition hover:border-sky-500/30 hover:bg-slate-800/30"
           >
             <div>
               <h3 className="font-medium text-sky-400">{t("dashboard.needHelp")}</h3>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
             </Link>
             <Link
               href="/exchange"
-              className="flex flex-col rounded-xl border border-slate-800 bg-amber-500/10 p-6 transition hover:border-amber-500/50"
+              className="flex flex-col rounded-xl border border-amber-500/30 bg-amber-500/15 backdrop-blur-xl p-6 transition hover:border-amber-500/40 hover:bg-amber-500/20"
             >
               <span className="text-amber-400">{t("dashboard.swap")}</span>
               <p className="mt-2 text-slate-400">Trade on KanoExchange</p>

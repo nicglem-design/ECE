@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTerminology } from "@/contexts/TerminologyContext";
 import { useWalletBalances } from "@/hooks/useWallet";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
@@ -53,6 +54,7 @@ function AssetSparkline({
 
 export default function PortfolioPage() {
   const { t } = useLanguage();
+  const { isPro } = useTerminology();
   const { currency } = useCurrency();
   const { assets, loading } = useWalletBalances();
   const [totalValue, setTotalValue] = useState(0);
@@ -128,14 +130,14 @@ export default function PortfolioPage() {
         <WalletNav />
         <div className="mx-auto max-w-4xl px-6 py-8">
           <h1 className="text-2xl font-bold text-slate-200">{t("portfolio.title")}</h1>
-          <p className="mt-2 text-slate-400">{t("portfolio.subtitle")}</p>
+          <p className="mt-2 text-slate-400">{isPro ? t("portfolio.subtitle") : t("portfolio.subtitleCoins")}</p>
           {loading ? (
-            <p className="mt-8 text-slate-500">{t("portfolio.loadingAssets")}</p>
+            <p className="mt-8 text-slate-500">{isPro ? t("portfolio.loadingAssets") : t("portfolio.loadingCoins")}</p>
           ) : assets.length === 0 ? (
-            <p className="mt-8 text-slate-500">{t("portfolio.noAssets")}</p>
+            <p className="mt-8 text-slate-500">{isPro ? t("portfolio.noAssets") : t("portfolio.noCoins")}</p>
           ) : (
             <>
-              <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
                 <span className="text-lg font-semibold text-slate-200">{t("portfolio.totalValue")}</span>
                 <div className="flex items-center gap-4">
                   <span className="font-mono text-lg font-semibold text-slate-200">
@@ -153,14 +155,14 @@ export default function PortfolioPage() {
                 </div>
               </div>
               <div className="mt-8">
-                <PortfolioChart assets={assets} onTotalChange={onTotalChange} />
+                <PortfolioChart assets={assets} onTotalChange={onTotalChange} useCoinsTerminology={!isPro} />
               </div>
               <div className="mt-8 space-y-4">
                 {assets.map((a) => (
                   <Link
                     key={a.chainId}
                     href={`/wallet/portfolio/asset/${encodeURIComponent(a.chainId)}`}
-                    className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4 transition hover:border-slate-600 hover:bg-slate-800/50"
+                    className="flex items-center gap-4 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4 transition hover:border-slate-400/30 hover:bg-slate-800/40"
                   >
                     <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
                       <TokenLogo chainId={a.chainId} symbol={a.symbol} size={32} />

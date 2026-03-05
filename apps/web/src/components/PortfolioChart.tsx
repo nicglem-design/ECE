@@ -35,9 +35,11 @@ const PERIODS = [
 export function PortfolioChart({
   assets,
   onTotalChange,
+  useCoinsTerminology = false,
 }: {
   assets: Asset[];
   onTotalChange?: (total: number, changePct: number | null) => void;
+  useCoinsTerminology?: boolean;
 }) {
   const { t } = useLanguage();
   const { currency } = useCurrency();
@@ -140,25 +142,25 @@ export function PortfolioChart({
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/50">
+      <div className="flex h-96 items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl">
         <p className="text-slate-500">{t("portfolio.loadingChart")}</p>
       </div>
     );
   }
   if (data.length < 2) {
     return (
-      <div className="flex h-96 flex-col items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="flex h-96 flex-col items-center justify-center gap-2 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
         <p className="text-center text-slate-500">
           {assets.length > 0
             ? (t("portfolio.noChartData") || "No chart data available. Try again later.")
-            : (t("portfolio.noAssets") || "No assets to display.")}
+            : (useCoinsTerminology ? t("portfolio.noCoinsToDisplay") : t("portfolio.noAssets")) || (useCoinsTerminology ? "No coins to display." : "No assets to display.")}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+    <div className="rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1">
           {PERIODS.map((p) => (

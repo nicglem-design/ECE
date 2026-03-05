@@ -189,7 +189,7 @@ export default function CryptoDetailPage() {
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
-        <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-800/50 bg-slate-900/30 p-4">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4">
           {chartLoading && chartData.length === 0 ? (
             <div className="flex flex-1 items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />

@@ -39,7 +39,7 @@ export function DashboardReceiveWidget() {
   const loading = chainsLoading || addressesLoading;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+    <div className="rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
       <h3 className="font-medium text-sky-400">{t("receive.title")}</h3>
       <p className="mt-1 text-sm text-slate-400">{t("receive.subtitle")}</p>
       {loading ? (

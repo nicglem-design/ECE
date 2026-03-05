@@ -7,12 +7,14 @@ import {
   fetchMarketChartForDetail,
   generateFallbackChartData,
   getPriceAndChangeForCoin,
+  getPriceForAsset,
   getPricesBatch,
   CHAIN_TO_COINGECKO,
 } from "@/lib/coingecko";
 import { useWalletBalances, useWalletTransactions } from "@/hooks/useWallet";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTerminology } from "@/contexts/TerminologyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getCurrencySymbol } from "@/lib/currencies";
 import { CryptoDetailChart, type ChartRange, type ChartMode } from "@/components/CryptoDetailChart";
@@ -50,6 +52,7 @@ export default function AssetPortfolioChartPage() {
   const params = useParams();
   const { currency } = useCurrency();
   const { t } = useLanguage();
+  const { isPro } = useTerminology();
   const { assets, loading: assetsLoading } = useWalletBalances();
   const chainId = typeof params?.chainId === "string" ? params.chainId : "";
 
@@ -66,6 +69,7 @@ export default function AssetPortfolioChartPage() {
   const [chartData, setChartData] = useState<[number, number][]>([]);
   const [chartCandles, setChartCandles] = useState<{ time: number; open: number; high: number; low: number; close: number }[] | null>(null);
   const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
+  const [pricePerToken, setPricePerToken] = useState<number | null>(null);
   const [changePct, setChangePct] = useState<number | null>(null);
   const [range, setRange] = useState<ChartRange>("7");
   const [chartLoading, setChartLoading] = useState(true);
@@ -106,6 +110,7 @@ export default function AssetPortfolioChartPage() {
           setPortfolioValue(portfolioData[0]?.[1] ?? null);
           setChangePct(null);
         }
+        setPricePerToken((prev) => prev ?? prices[prices.length - 1]?.[1] ?? null);
       } else {
         const { price, priceChange24h } = await getPriceAndChangeForCoin(cgId, currency);
         const fallback = generateFallbackChartData(price, days, priceChange24h);
@@ -115,6 +120,7 @@ export default function AssetPortfolioChartPage() {
         setIsFallbackChart(true);
         setPortfolioValue(amount * price);
         setChangePct(priceChange24h);
+        setPricePerToken((prev) => prev ?? price);
       }
       setChartLoading(false);
     },
@@ -129,14 +135,25 @@ export default function AssetPortfolioChartPage() {
     fetchChart(effectiveRange as ChartRange);
   }, [chainId, asset, range, fetchChart, chartMaxDays]);
 
-  useEffect(() => {
-    if (!asset || !chainId) return;
-    getPricesBatch([chainId], currency).then((prices) => {
-      const price = prices[chainId] ?? 0;
-      const amt = parseFloat(asset.amount) || 0;
-      if (price > 0 && amt > 0 && portfolioValue == null) setPortfolioValue(amt * price);
+  const fetchCurrentPrice = useCallback(() => {
+    if (!chainId) return;
+    getPriceForAsset(chainId, currency || "usd").then((price) => {
+      if (price != null && price > 0) {
+        setPricePerToken(price);
+        if (asset) {
+          const amt = parseFloat(asset.amount) || 0;
+          if (amt > 0) setPortfolioValue(amt * price);
+        }
+      }
     });
-  }, [asset, chainId, currency, portfolioValue]);
+  }, [chainId, currency, asset]);
+
+  useEffect(() => {
+    if (!chainId) return;
+    fetchCurrentPrice();
+    const interval = setInterval(fetchCurrentPrice, 30000);
+    return () => clearInterval(interval);
+  }, [chainId, fetchCurrentPrice]);
 
 
   const changeColor =
@@ -166,7 +183,7 @@ export default function AssetPortfolioChartPage() {
       <ProtectedRoute>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
-          <p className="text-slate-400">{t("portfolio.loadingAssets") || "Loading..."}</p>
+          <p className="text-slate-400">{(isPro ? t("portfolio.loadingAssets") : t("portfolio.loadingCoins")) || "Loading..."}</p>
         </div>
       </ProtectedRoute>
     );
@@ -176,7 +193,7 @@ export default function AssetPortfolioChartPage() {
     return (
       <ProtectedRoute>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-400">
-          <p>{t("portfolio.noChartData") || "Asset not found"}</p>
+          <p>{isPro ? t("portfolio.assetNotFound") : t("portfolio.coinNotFound")}</p>
           <Link href="/wallet/portfolio" className="text-sky-400 hover:underline">
             {t("portfolio.backToPortfolio") || "Back to portfolio"}
           </Link>
@@ -189,7 +206,7 @@ export default function AssetPortfolioChartPage() {
     return (
       <ProtectedRoute>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-400">
-          <p>{t("portfolio.noAssets") || "No assets in portfolio"}</p>
+          <p>{isPro ? t("portfolio.noAssets") : t("portfolio.noCoins")}</p>
           <Link href="/wallet/portfolio" className="text-sky-400 hover:underline">
             {t("portfolio.backToPortfolio") || "Back to portfolio"}
           </Link>
@@ -229,10 +246,16 @@ export default function AssetPortfolioChartPage() {
               </div>
             </div>
           </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500">{display.symbol} {t("portfolio.pricePerToken") || "Price"}</p>
+            <p className="font-mono text-sm font-medium text-slate-200 sm:text-base">
+              {pricePerToken != null ? formatValue(pricePerToken, currency || "usd") : "—"}
+            </p>
+          </div>
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6">
-          <div className="flex shrink-0 flex-col rounded-xl border border-slate-800/50 bg-slate-900/30 p-4" style={{ minHeight: 460 }}>
+          <div className="flex shrink-0 flex-col rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4" style={{ minHeight: 460 }}>
             {chartLoading && chartData.length === 0 ? (
               <div className="flex h-[380px] items-center justify-center">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
@@ -248,62 +271,6 @@ export default function AssetPortfolioChartPage() {
                   height={CHART_HEIGHT}
                   maxDays={chartMaxDays}
                 />
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/wallet/send?chain=${encodeURIComponent(chainId)}`}
-                      className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-500/50 hover:bg-slate-700"
-                    >
-                      <svg className="h-5 w-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17L17 7M17 7h-6M17 7v6" />
-                      </svg>
-                      {t("wallet.send")}
-                    </Link>
-                    <Link
-                      href={`/wallet/receive?chain=${encodeURIComponent(chainId)}`}
-                      className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-500/50 hover:bg-slate-700"
-                    >
-                      <svg className="h-5 w-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7L7 17M7 17h6M7 17v-6" />
-                      </svg>
-                      {t("wallet.receive")}
-                    </Link>
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-amber-500/50 hover:bg-slate-700"
-                      title={t("portfolio.earn")}
-                    >
-                      <svg className="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
-                      {t("portfolio.stake")}
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setChartMode("simple")}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        chartMode === "simple"
-                          ? "bg-amber-500 text-white"
-                          : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                      }`}
-                    >
-                      {t("portfolio.chartSimple")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setChartMode("complex")}
-                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        chartMode === "complex"
-                          ? "bg-amber-500 text-white"
-                          : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                      }`}
-                    >
-                      {t("portfolio.chartComplex")}
-                    </button>
-                  </div>
-                </div>
               </div>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-4 text-slate-500">
@@ -314,6 +281,65 @@ export default function AssetPortfolioChartPage() {
                 >
                   {t("portfolio.backToPortfolio") || "Back to portfolio"}
                 </Link>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/wallet/send?chain=${encodeURIComponent(chainId)}`}
+                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-500/50 hover:bg-slate-700"
+              >
+                <svg className="h-5 w-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17L17 7M17 7h-6M17 7v6" />
+                </svg>
+                {t("wallet.send")}
+              </Link>
+              <Link
+                href={`/wallet/receive?chain=${encodeURIComponent(chainId)}`}
+                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-500/50 hover:bg-slate-700"
+              >
+                <svg className="h-5 w-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7L7 17M7 17h6M7 17v-6" />
+                </svg>
+                {t("wallet.receive")}
+              </Link>
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-amber-500/50 hover:bg-slate-700"
+                title={isPro ? t("portfolio.stake") : t("portfolio.earn")}
+              >
+                <svg className="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                {isPro ? t("portfolio.stake") : t("portfolio.earn")}
+              </button>
+            </div>
+            {chartData.length > 0 && (
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setChartMode("simple")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    chartMode === "simple"
+                      ? "bg-amber-500 text-white"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  {t("portfolio.chartSimple")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode("complex")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    chartMode === "complex"
+                      ? "bg-amber-500 text-white"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                  }`}
+                >
+                  {t("portfolio.chartComplex")}
+                </button>
               </div>
             )}
           </div>
@@ -329,7 +355,7 @@ export default function AssetPortfolioChartPage() {
                 {transactions.map((tx, i) => (
                   <div
                     key={tx.txHash + i}
-                    className="rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+                    className="rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span

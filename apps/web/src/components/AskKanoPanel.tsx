@@ -59,8 +59,8 @@ export function AskKanoPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-end p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative flex h-[70vh] max-h-[500px] w-full max-w-md flex-col rounded-2xl border border-slate-700 bg-slate-900 shadow-xl">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex h-[70vh] max-h-[500px] w-full max-w-md flex-col rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
           <h3 className="font-semibold text-slate-200">{t("ai.askKano")}</h3>
           <button

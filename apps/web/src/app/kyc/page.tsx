@@ -71,7 +71,7 @@ export default function KycPage() {
           {loading ? (
             <p className="mt-8 text-slate-500">{t("kyc.loading")}</p>
           ) : notConfigured ? (
-            <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="mt-8 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
               <p className="text-slate-400">{t("kyc.notConfigured")}</p>
               <Link
                 href="/dashboard"
@@ -81,7 +81,7 @@ export default function KycPage() {
               </Link>
             </div>
           ) : error ? (
-            <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="mt-8 rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
               <p className="text-red-400">{error}</p>
               <Link
                 href="/dashboard"
@@ -91,7 +91,7 @@ export default function KycPage() {
               </Link>
             </div>
           ) : accessToken ? (
-            <div className="mt-8 min-h-[500px] overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
+            <div className="mt-8 min-h-[500px] overflow-hidden rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl">
               <SumsubWebSdk
                 accessToken={accessToken}
                 expirationHandler={expirationHandler}

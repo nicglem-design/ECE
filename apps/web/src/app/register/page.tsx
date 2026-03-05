@@ -48,7 +48,7 @@ export default function RegisterPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/50 p-8">
+      <div className="w-full max-w-md rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
         <h1 className="text-2xl font-bold text-slate-200">{t("auth.registerTitle")}</h1>
         <p className="mt-2 text-sm text-slate-400">{t("auth.registerDesc")}</p>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

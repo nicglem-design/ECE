@@ -169,11 +169,11 @@ export function TopCryptoWidget() {
 
   if (loading && coins.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+      <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
         <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
         <div className="mt-4 space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg bg-slate-800/50 py-3 px-4 animate-pulse">
+            <div key={i} className="flex items-center justify-between rounded-lg border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl py-3 px-4 animate-pulse">
               <div className="h-5 w-24 rounded bg-slate-700" />
               <div className="h-5 w-20 rounded bg-slate-700" />
             </div>
@@ -184,7 +184,7 @@ export function TopCryptoWidget() {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+    <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
         {wsConnected ? (
@@ -229,7 +229,7 @@ export function TopCryptoWidget() {
                 <Link
                   key={c.id}
                   href={`/crypto/${c.id}`}
-                  className="flex items-center gap-4 rounded-lg border border-slate-700/50 bg-slate-800/30 px-4 py-3 transition hover:border-slate-600 hover:bg-slate-800/50"
+                  className="flex items-center gap-4 rounded-lg border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl px-4 py-3 transition hover:border-slate-400/30 hover:bg-slate-800/40"
                 >
                   <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-700/80 text-xs font-medium text-slate-400">

@@ -93,7 +93,7 @@ export default function HomePage() {
         </div>
       </header>
       <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="rounded-2xl border border-slate-800/50 bg-slate-900/30 p-6">
+        <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
               <h2 className="text-xl font-bold text-slate-200">
@@ -110,7 +110,7 @@ export default function HomePage() {
       </section>
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="grid gap-12 md:grid-cols-2">
-          <div id="wallet" className="rounded-2xl border border-slate-800/50 bg-slate-900/30 p-8">
+          <div id="wallet" className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
             <h2 className="text-2xl font-bold text-sky-400">{t("home.wallet.title")}</h2>
             <p className="mt-3 text-slate-400">{t("home.wallet.desc")}</p>
             <Link
@@ -120,7 +120,7 @@ export default function HomePage() {
               {t("home.wallet.open")}
             </Link>
           </div>
-          <div id="exchange" className="rounded-2xl border border-slate-800/50 bg-slate-900/30 p-8">
+          <div id="exchange" className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
             <h2 className="text-2xl font-bold text-amber-400">{t("home.exchange.title")}</h2>
             <p className="mt-3 text-slate-400">{t("home.exchange.desc")}</p>
             <Link

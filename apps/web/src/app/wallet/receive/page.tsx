@@ -185,7 +185,7 @@ function ReceivePageContent() {
                 </div>
               )}
               {currentAddress && (
-                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-center">
+                <div className="rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6 text-center">
                   <p className="text-sm text-slate-400">
                     {t("receive.yourNameAddress").replace("{name}", currentChain?.name ?? selectedChain)}
                   </p>
