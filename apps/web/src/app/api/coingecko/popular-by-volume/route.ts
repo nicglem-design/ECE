@@ -50,8 +50,10 @@ export async function GET(request: NextRequest) {
       });
     }
     const data = await res.json();
-    setCached("popular-volume", params, data);
-    return NextResponse.json(data, {
+    // CoinGecko can return { error: "..." } on rate limit even with 200 - ensure we have an array
+    const safeData = Array.isArray(data) && data.length > 0 ? data : FALLBACK_COINS;
+    setCached("popular-volume", params, safeData);
+    return NextResponse.json(safeData, {
       headers: {
         "Cache-Control": `public, max-age=${Math.floor(CACHE_TTL_MS / 1000)}`,
         Pragma: "no-cache",

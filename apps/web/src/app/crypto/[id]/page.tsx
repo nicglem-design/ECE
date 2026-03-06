@@ -16,7 +16,8 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getCurrencySymbol } from "@/lib/currencies";
-import { CryptoDetailChart, type ChartRange } from "@/components/CryptoDetailChart";
+import { CryptoDetailChart, type ChartRange, type ChartMode } from "@/components/CryptoDetailChart";
+import { useChartMode } from "@/contexts/ChartModeContext";
 import { TokenLogo } from "@/components/TokenLogo";
 
 const COIN_NAMES: Record<string, { symbol: string; name: string }> = {
@@ -59,6 +60,7 @@ export default function CryptoDetailPage() {
   const [priceChange24h, setPriceChange24h] = useState<number | null>(null);
   const chartMaxDays = id === "tether" ? 365 : undefined;
   const [range, setRange] = useState<ChartRange>("7");
+  const { chartMode, setChartMode } = useChartMode();
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(420);
@@ -203,6 +205,7 @@ export default function CryptoDetailPage() {
                 candles={chartCandles}
                 range={range}
                 onRangeChange={setRange}
+                chartMode={chartMode}
                 height={chartHeight}
                 maxDays={chartMaxDays}
               />
@@ -215,18 +218,40 @@ export default function CryptoDetailPage() {
         </div>
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            href={`/exchange?buy=${id}`}
-            className="flex items-center justify-center rounded-xl bg-amber-500 px-6 py-4 text-base font-semibold text-white transition hover:bg-amber-600"
-          >
-            {t("crypto.buy") || "Buy"} {coin.symbol}
-          </Link>
-          <Link
-            href="/exchange"
-            className="flex items-center justify-center rounded-xl border border-slate-700 bg-slate-800/50 px-6 py-4 text-base font-medium text-slate-200 transition hover:bg-slate-700"
-          >
-            {t("crypto.openExchange") || "Open Exchange"}
-          </Link>
+          {chartData.length > 0 && (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setChartMode("simple")}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  chartMode === "simple"
+                    ? "bg-amber-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                }`}
+              >
+                {t("portfolio.chartSimple")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMode("complex")}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  chartMode === "complex"
+                    ? "bg-amber-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                }`}
+              >
+                {t("portfolio.chartComplex")}
+              </button>
+            </div>
+          )}
+          <div className="flex flex-1 flex-wrap gap-3 sm:justify-end">
+            <Link
+              href={`/exchange?buy=${id}`}
+              className="flex items-center justify-center rounded-xl bg-amber-500 px-6 py-4 text-base font-semibold text-white transition hover:bg-amber-600"
+            >
+              {t("crypto.buy") || "Buy"} {coin.symbol}
+            </Link>
+          </div>
         </div>
       </main>
     </div>

@@ -206,15 +206,23 @@ export function PopularCryptoWidget() {
 
   return (
     <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.popularCrypto")}</h2>
-        <span
-          className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400"
-          title={orderbookActive ? "Live from order book (active users)" : "Live prices from CoinGecko"}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.popularCrypto")}</h2>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400"
+            title={orderbookActive ? "Live from order book (active users)" : "Live prices from CoinGecko"}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" aria-hidden />
+            Live
+          </span>
+        </div>
+        <Link
+          href="/market"
+          className="text-sm font-medium text-amber-400 hover:text-amber-300"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" aria-hidden />
-          Live
-        </span>
+          {t("nav.market")} →
+        </Link>
       </div>
       <p className="mt-1 text-sm text-slate-500">
         {t("dashboard.livePrices")} {getCurrencySymbol(currency)} · {t("dashboard.byVolume")}

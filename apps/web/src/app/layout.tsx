@@ -4,10 +4,12 @@ import { ThemeInit } from "@/components/ThemeInit";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { TerminologyProvider } from "@/contexts/TerminologyContext";
+import { ChartModeProvider } from "@/contexts/ChartModeContext";
 import { AskKanoProvider } from "@/contexts/AskKanoContext";
 import { AskKanoShell } from "@/components/AskKanoShell";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CookieConsent } from "@/components/CookieConsent";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://kanoxchange.com"),
@@ -30,20 +32,24 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-slate-950">
+        <AppErrorBoundary>
         <ThemeInit />
         <LanguageProvider>
           <AuthProvider>
             <CurrencyProvider>
               <TerminologyProvider>
+                <ChartModeProvider>
                 <AskKanoProvider>
                   <AskKanoShell />
                   {children}
                   <CookieConsent />
                 </AskKanoProvider>
+                </ChartModeProvider>
               </TerminologyProvider>
             </CurrencyProvider>
           </AuthProvider>
         </LanguageProvider>
+        </AppErrorBoundary>
       </body>
     </html>
   );

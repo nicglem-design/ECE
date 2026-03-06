@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -32,14 +34,18 @@ const PERIODS = [
   { id: "5Y", days: 1825, label: "5Y" },
 ];
 
+export type ChartMode = "simple" | "complex";
+
 export function PortfolioChart({
   assets,
   onTotalChange,
   useCoinsTerminology = false,
+  chartMode: chartModeProp,
 }: {
   assets: Asset[];
   onTotalChange?: (total: number, changePct: number | null) => void;
   useCoinsTerminology?: boolean;
+  chartMode?: ChartMode;
 }) {
   const { t } = useLanguage();
   const { currency } = useCurrency();
@@ -47,6 +53,8 @@ export function PortfolioChart({
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("1M");
   const [zoom, setZoom] = useState<{ start: number; end: number } | null>(null);
+  const [internalChartMode, setInternalChartMode] = useState<ChartMode>("complex");
+  const chartMode = chartModeProp ?? internalChartMode;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const periodConfig = PERIODS.find((p) => p.id === period) ?? PERIODS[2];
@@ -163,6 +171,32 @@ export function PortfolioChart({
     <div className="rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1">
+          {chartModeProp == null && (
+            <>
+              <button
+                type="button"
+                onClick={() => setInternalChartMode("simple")}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  chartMode === "simple"
+                    ? "bg-amber-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                }`}
+              >
+                {t("portfolio.chartSimple")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setInternalChartMode("complex")}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  chartMode === "complex"
+                    ? "bg-amber-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                }`}
+              >
+                {t("portfolio.chartComplex")}
+              </button>
+            </>
+          )}
           {PERIODS.map((p) => (
             <button
               key={p.id}
@@ -213,57 +247,102 @@ export function PortfolioChart({
       </div>
       <div ref={containerRef} className="h-96" onWheel={handleWheel}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={visibleData} margin={{ top: 12, right: 16, left: 8, bottom: 8 }}>
-            <defs>
-              <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
-            <YAxis
-              stroke="#64748b"
-              fontSize={11}
-              tickFormatter={(v) => `${sym} ${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(2)}`}
-              domain={["auto", "auto"]}
-              tickLine={false}
-              width={56}
-            />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px" }}
-              formatter={(value: number) => [`${sym} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Value"]}
-              labelFormatter={(label) => label}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#0ea5e9"
-              strokeWidth={2.5}
-              fill="url(#portfolioGradient)"
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 2, stroke: "#0ea5e9" }}
-            />
-          </AreaChart>
+          {chartMode === "simple" ? (
+            <LineChart data={visibleData} margin={{ top: 12, right: 16, left: 8, bottom: 8 }}>
+              <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
+              <YAxis
+                stroke="#64748b"
+                fontSize={11}
+                tickFormatter={(v) => `${sym} ${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(2)}`}
+                domain={["auto", "auto"]}
+                tickLine={false}
+                width={56}
+              />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px" }}
+                formatter={(value: number) => [`${sym} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Value"]}
+                labelFormatter={(label) => label}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#0ea5e9"
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: "#0ea5e9" }}
+              />
+            </LineChart>
+          ) : (
+            <AreaChart data={visibleData} margin={{ top: 12, right: 16, left: 8, bottom: 8 }}>
+              <defs>
+                <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
+              <YAxis
+                stroke="#64748b"
+                fontSize={11}
+                tickFormatter={(v) => `${sym} ${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(2)}`}
+                domain={["auto", "auto"]}
+                tickLine={false}
+                width={56}
+              />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #334155", borderRadius: "8px" }}
+                formatter={(value: number) => [`${sym} ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Value"]}
+                labelFormatter={(label) => label}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#0ea5e9"
+                strokeWidth={2.5}
+                fill="url(#portfolioGradient)"
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: "#0ea5e9" }}
+              />
+            </AreaChart>
+          )}
         </ResponsiveContainer>
       </div>
       {data.length > 10 && (
         <div className="mt-2 h-12">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
-              <Brush
-                dataKey="time"
-                height={28}
-                stroke="#334155"
-                fill="#1e293b"
-                travellerWidth={8}
-                onChange={(range) => {
-                  if (range?.startIndex != null && range?.endIndex != null) {
-                    setZoom({ start: range.startIndex, end: Math.min(range.endIndex + 1, data.length) });
-                  }
-                }}
-              />
-              <Area type="monotone" dataKey="value" stroke="#0ea5e9" fill="none" strokeWidth={1} />
-            </AreaChart>
+            {chartMode === "simple" ? (
+              <LineChart data={data}>
+                <Brush
+                  dataKey="time"
+                  height={28}
+                  stroke="#334155"
+                  fill="#1e293b"
+                  travellerWidth={8}
+                  onChange={(range) => {
+                    if (range?.startIndex != null && range?.endIndex != null) {
+                      setZoom({ start: range.startIndex, end: Math.min(range.endIndex + 1, data.length) });
+                    }
+                  }}
+                />
+                <Line type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={1} dot={false} />
+              </LineChart>
+            ) : (
+              <AreaChart data={data}>
+                <Brush
+                  dataKey="time"
+                  height={28}
+                  stroke="#334155"
+                  fill="#1e293b"
+                  travellerWidth={8}
+                  onChange={(range) => {
+                    if (range?.startIndex != null && range?.endIndex != null) {
+                      setZoom({ start: range.startIndex, end: Math.min(range.endIndex + 1, data.length) });
+                    }
+                  }}
+                />
+                <Area type="monotone" dataKey="value" stroke="#0ea5e9" fill="none" strokeWidth={1} />
+              </AreaChart>
+            )}
           </ResponsiveContainer>
         </div>
       )}

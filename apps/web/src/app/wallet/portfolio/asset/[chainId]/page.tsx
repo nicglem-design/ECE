@@ -18,6 +18,7 @@ import { useTerminology } from "@/contexts/TerminologyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getCurrencySymbol } from "@/lib/currencies";
 import { CryptoDetailChart, type ChartRange, type ChartMode } from "@/components/CryptoDetailChart";
+import { useChartMode } from "@/contexts/ChartModeContext";
 import { TokenLogo } from "@/components/TokenLogo";
 
 function getAssetDisplay(chainId: string, symbol?: string, name?: string) {
@@ -74,7 +75,7 @@ export default function AssetPortfolioChartPage() {
   const [range, setRange] = useState<ChartRange>("7");
   const [chartLoading, setChartLoading] = useState(true);
   const [isFallbackChart, setIsFallbackChart] = useState(false);
-  const [chartMode, setChartMode] = useState<ChartMode>("complex");
+  const { chartMode, setChartMode } = useChartMode();
   const CHART_HEIGHT = 360;
 
   const fetchChart = useCallback(

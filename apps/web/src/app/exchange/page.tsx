@@ -37,8 +37,8 @@ export default function ExchangePage() {
               <Link href="/wallet" className="text-sm text-slate-400 hover:text-sky-400">
                 {t("nav.wallet")}
               </Link>
-              <Link href="/exchange" className="text-sm text-amber-400">
-                {t("nav.exchange")}
+              <Link href="/market" className="text-sm text-slate-400 hover:text-sky-400">
+                {t("nav.market")}
               </Link>
               <Link href="/profile" className="text-sm text-slate-400 hover:text-sky-400">
                 {t("nav.profile")}
@@ -72,6 +72,23 @@ export default function ExchangePage() {
           )}
           <h1 className="text-2xl font-bold text-slate-200">{t("home.exchange.title")}</h1>
           <p className="mt-2 text-slate-400">{t("home.exchange.desc")}</p>
+          <Link
+            href="/market"
+            className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-slate-400/30 bg-slate-800/40 px-6 py-4 backdrop-blur-xl transition hover:border-amber-500/40 hover:bg-slate-700/50"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+              </span>
+              <div>
+                <span className="font-semibold text-slate-200">{t("nav.market")}</span>
+                <p className="text-sm text-slate-500">{t("exchange.cryptoList")}</p>
+              </div>
+            </div>
+            <span className="text-amber-400">→</span>
+          </Link>
           <div className="mt-8 grid gap-8 lg:grid-cols-2">
             <div className="space-y-6">
               <CryptoListWidget />

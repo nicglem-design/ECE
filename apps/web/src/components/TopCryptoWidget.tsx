@@ -226,15 +226,17 @@ export function TopCryptoWidget() {
 
   return (
     <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-6">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
-        <span
-          className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400"
-          title="Live prices from CoinGecko"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" aria-hidden />
-          Live
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-200">{t("dashboard.topCrypto")}</h2>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-400"
+            title="Live prices from CoinGecko"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" aria-hidden />
+            Live
+          </span>
+        </div>
       </div>
       <p className="mt-1 text-sm text-slate-500">
         {t("dashboard.livePrices")} {getCurrencySymbol(currency)} · {t("dashboard.byMarketCap")}

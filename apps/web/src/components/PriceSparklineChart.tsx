@@ -2,21 +2,26 @@
 
 import { SPARKLINE_WIDTH, SPARKLINE_HEIGHT } from "@/lib/chart-config";
 
+export type ChartMode = "simple" | "complex";
+
 /**
  * Price movement sparkline chart for cryptocurrencies.
  * Green when movement is positive, red when negative, gray when flat.
  * Uses shared dimensions for consistent detailed charts across the app.
+ * chartMode: "simple" = line only, "complex" = line + area fill.
  */
 export function PriceSparklineChart({
   prices,
   change24h,
   width = SPARKLINE_WIDTH,
   height = SPARKLINE_HEIGHT,
+  chartMode = "complex",
 }: {
   prices: number[];
   change24h?: number | null;
   width?: number;
   height?: number;
+  chartMode?: ChartMode;
 }) {
   const trend =
     change24h != null
@@ -93,7 +98,7 @@ export function PriceSparklineChart({
       aria-label="Price movement chart"
     >
       <title>Last 24 hours{change24h != null ? `: ${change24h > 0 ? "+" : ""}${change24h.toFixed(2)}%` : ""}</title>
-      <path d={fillPath} fill={stroke} fillOpacity={fillOpacity} />
+      {chartMode === "complex" && <path d={fillPath} fill={stroke} fillOpacity={fillOpacity} />}
       <path
         d={linePath}
         fill="none"
