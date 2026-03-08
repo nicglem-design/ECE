@@ -18,6 +18,10 @@ export const config = {
   stripeConnectReturnUrl: process.env.STRIPE_CONNECT_RETURN_URL || "http://localhost:3000/accounts?connect=success",
   stripeConnectRefreshUrl: process.env.STRIPE_CONNECT_REFRESH_URL || "http://localhost:3000/accounts?connect=refresh",
   isProduction: isProd,
+  /** Max fiat withdrawal (USD equivalent) per user per 24h. 0 = no limit. */
+  withdrawalLimitDaily: parseFloat(process.env.WITHDRAWAL_LIMIT_DAILY || "0") || 0,
+  /** Max crypto send count per user per 24h. 0 = no limit. */
+  sendLimitDaily: parseInt(process.env.SEND_LIMIT_DAILY || "0", 10) || 0,
 };
 
 if (isProd && !config.jwtSecret) {

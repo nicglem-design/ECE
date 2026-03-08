@@ -5,6 +5,8 @@ import { authMiddleware } from "../middleware/auth";
 import { config } from "../config";
 import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { v4 as uuidv4 } from "uuid";
+import { logAudit } from "../lib/audit";
+import { checkWithdrawalLimit } from "../lib/limits";
 
 const router = Router();
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
@@ -255,6 +257,11 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     res.status(400).json({ message: "Invalid amount" });
     return;
   }
+  const limitCheck = await checkWithdrawalLimit(user.sub, numAmount, curr);
+  if (!limitCheck.ok) {
+    res.status(400).json({ message: limitCheck.message });
+    return;
+  }
   await ensureFiatBalance(user.sub, curr);
   const balance = (await db.prepare(
     "SELECT amount FROM fiat_balances WHERE user_id = ? AND currency = ?"
@@ -311,6 +318,7 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
   await db.prepare(
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, destination, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "withdraw", numAmount, status, destination, now);
+  logAudit(user.sub, "withdraw_fiat", { currency: curr, amount: numAmount, destination }).catch(() => {});
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 

@@ -206,7 +206,13 @@ export async function POST(request: NextRequest) {
     const useRealMoney = process.env.SWAP_REAL_MONEY === "true" || process.env.SWAP_REAL_MONEY === "1";
 
     if (useRealMoney) {
-      const uid = userId || "guest";
+      if (!authHeader?.startsWith("Bearer ")) {
+        return NextResponse.json(
+          { error: "Authentication required for real execution. Please log in." },
+          { status: 401 }
+        );
+      }
+      const uid = userId ?? undefined;
       const fromStable = isStablecoin(fromCoinId);
       const toStable = isStablecoin(toCoinId);
 

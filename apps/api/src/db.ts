@@ -239,6 +239,18 @@ if (connectionString) {
         );
         CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
         CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_type ON auth_tokens(user_id, type);
+
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          action TEXT NOT NULL,
+          details TEXT,
+          ip TEXT,
+          created_at BIGINT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
       `);
 
       try {
@@ -464,6 +476,18 @@ if (connectionString) {
     );
     CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_type ON auth_tokens(user_id, type);
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      action TEXT NOT NULL,
+      details TEXT,
+      ip TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
   `);
 
   // Wrap SQLite sync API to return Promises (unified async interface)

@@ -41,6 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onAuthCleared = () => {
+      setToken(null);
+      setEmail(null);
+    };
+    window.addEventListener("auth:cleared", onAuthCleared);
+    return () => window.removeEventListener("auth:cleared", onAuthCleared);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/auth/login`, {

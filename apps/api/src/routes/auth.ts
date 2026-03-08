@@ -7,8 +7,13 @@ import { config } from "../config";
 import { v4 as uuidv4 } from "uuid";
 import { validateBody } from "../middleware/validate";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/email";
+import { logAudit } from "../lib/audit";
 
 const router = Router();
+
+function getClientIp(req: Request): string | undefined {
+  return (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip;
+}
 
 const loginSchema = z.object({
   email: z.string().email().max(255),
@@ -35,9 +40,11 @@ router.post("/login", validateBody(loginSchema), async (req: Request, res: Respo
     const { email, password } = req.body;
     const user = (await db.prepare("SELECT id, email, password_hash, email_verified FROM users WHERE email = ?").get(email.toLowerCase())) as { id: string; email: string; password_hash: string; email_verified?: number } | undefined;
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      logAudit(null, "login_fail", { email: email.toLowerCase() }, getClientIp(req)).catch(() => {});
       res.status(401).json({ message: "Invalid email or password" });
       return;
     }
+    logAudit(user.id, "login_success", { email: user.email }, getClientIp(req)).catch(() => {});
     const token = jwt.sign(
       { sub: user.id, email: user.email },
       config.jwtSecret,
@@ -153,6 +160,7 @@ router.post("/reset-password", validateBody(resetPasswordSchema), async (req: Re
     const passwordHash = await bcrypt.hash(password, 10);
     await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, row.user_id);
     await db.prepare("DELETE FROM auth_tokens WHERE token = ?").run(token);
+    logAudit(row.user_id, "password_reset", {}, getClientIp(req)).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     console.error("Reset password error:", err);

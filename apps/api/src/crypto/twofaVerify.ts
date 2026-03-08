@@ -11,7 +11,7 @@ export async function require2FAIfEnabled(userId: string, totpCode?: string): Pr
   ).get(userId)) as { totp_secret: string; enabled: number } | undefined;
   if (!row || !row.enabled) return { ok: true };
   if (!totpCode || typeof totpCode !== "string") {
-    return { ok: false, error: "2FA code required for send" };
+    return { ok: false, error: "2FA code required" };
   }
   const result = verifySync({ token: totpCode.trim(), secret: row.totp_secret });
   if (!result.valid) return { ok: false, error: "Invalid 2FA code" };

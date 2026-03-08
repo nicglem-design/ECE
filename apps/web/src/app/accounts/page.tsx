@@ -128,6 +128,10 @@ function AccountsContent() {
       setWithdrawError("Insufficient balance");
       return;
     }
+    if (showWithdraw2FA && !withdrawTotpCode.trim()) {
+      setWithdrawError("Enter your 2FA code");
+      return;
+    }
     setWithdrawLoading(true);
     setWithdrawError(null);
     setWithdrawSuccess(null);
@@ -138,14 +142,23 @@ function AccountsContent() {
           currency: withdrawCurrency,
           amount: amt,
           linkedAccountId: withdrawAccount || undefined,
+          totpCode: withdrawTotpCode.trim() || undefined,
         }
       );
       setWithdrawSuccess(`Withdrew ${amt.toLocaleString()} ${withdrawCurrency}`);
       setWithdrawAmount("");
+      setWithdrawTotpCode("");
+      setShowWithdraw2FA(false);
       refetch();
       setTimeout(() => setWithdrawSuccess(null), 4000);
     } catch (err) {
-      setWithdrawError(err instanceof Error ? err.message : "Withdrawal failed");
+      const msg = err instanceof Error ? err.message : "Withdrawal failed";
+      if (msg.toLowerCase().includes("2fa")) {
+        setShowWithdraw2FA(true);
+        setWithdrawError("");
+      } else {
+        setWithdrawError(msg);
+      }
     } finally {
       setWithdrawLoading(false);
     }
@@ -378,7 +391,11 @@ function AccountsContent() {
               )}
               <button
                 onClick={handleWithdraw}
-                disabled={withdrawLoading || !withdrawAmount}
+                disabled={
+                  withdrawLoading ||
+                  !withdrawAmount ||
+                  (showWithdraw2FA && withdrawTotpCode.trim().length < 6)
+                }
                 className="w-full rounded-xl bg-amber-600 py-3 font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
               >
                 {withdrawLoading ? "Withdrawing..." : "Withdraw"}

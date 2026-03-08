@@ -518,17 +518,23 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
     setError(null);
     setSuccess(null);
     try {
+      const body: {
+        fromCoinId: string;
+        toCoinId: string;
+        fromAmount: number;
+        userId?: string;
+      } = {
+        fromCoinId: fromCoin.id,
+        toCoinId: toCoin.id,
+        fromAmount: parseFloat(fromAmount),
+      };
+      if (!isAuthenticated) body.userId = "guest";
       const data = await apiPost<{
         ok?: boolean;
         error?: string;
         toAmount?: number;
         realExecution?: boolean;
-      }>("/api/market/swap", {
-        fromCoinId: fromCoin.id,
-        toCoinId: toCoin.id,
-        fromAmount: parseFloat(fromAmount),
-        userId: isAuthenticated ? "user" : "guest",
-      });
+      }>("/api/market/swap", body);
       if (data.error || !data.ok) throw new Error(data.error || "Swap failed");
       const received = data.toAmount ?? quote.toAmount;
       const msg = data.realExecution

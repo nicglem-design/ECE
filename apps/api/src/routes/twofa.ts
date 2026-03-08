@@ -7,6 +7,7 @@ import { generateSecret, generateURI, verifySync } from "otplib";
 import { toDataURL } from "qrcode";
 import { db, isAsync } from "../db";
 import { authMiddleware } from "../middleware/auth";
+import { logAudit } from "../lib/audit";
 
 const router = Router();
 
@@ -77,6 +78,7 @@ router.post("/verify", authMiddleware, async (req: Request, res: Response) => {
   await db.prepare(
     "UPDATE user_2fa SET enabled = 1, updated_at = ? WHERE user_id = ?"
   ).run(now, user.sub);
+  logAudit(user.sub, "2fa_enabled", {}).catch(() => {});
   res.json({ success: true, enabled: true });
 });
 
@@ -105,6 +107,7 @@ router.post("/disable", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
   await db.prepare("DELETE FROM user_2fa WHERE user_id = ?").run(user.sub);
+  logAudit(user.sub, "2fa_disabled", {}).catch(() => {});
   res.json({ success: true, enabled: false });
 });
 

@@ -43,6 +43,8 @@ import { syncDogecoinDepositsForUser } from "../crypto/depositSync-dogecoin";
 import { getTxStatus } from "../crypto/txStatus";
 import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { parseEther } from "ethers";
+import { logAudit } from "../lib/audit";
+import { checkSendLimit } from "../lib/limits";
 
 const SWAP_COINS = [
   { id: "tether", symbol: "USDT", name: "Tether" },
@@ -193,6 +195,11 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     res.status(400).json({ message: twofaCheck.error, code: "2FA_REQUIRED" });
     return;
   }
+  const sendLimitCheck = await checkSendLimit(user.sub);
+  if (!sendLimitCheck.ok) {
+    res.status(400).json({ message: sendLimitCheck.message });
+    return;
+  }
   if (!chainId || !toAddress || !amount) {
     res.status(400).json({ message: "chainId, toAddress, and amount required" });
     return;
@@ -274,6 +281,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
       res.json({ success: true, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
@@ -303,6 +311,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
       res.json({ success: true, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
@@ -332,6 +341,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
       res.json({ success: true, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
@@ -362,6 +372,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), ltcAddr, toAddress.trim(), txHash, now);
+      logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
       res.json({ success: true, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
@@ -392,6 +403,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), dogeAddr, toAddress.trim(), txHash, now);
+      logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
       res.json({ success: true, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Transaction failed";
@@ -417,6 +429,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   await db.prepare(
     "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+  logAudit(user.sub, "send_crypto", { chainId, amount: numAmount, toAddress: toAddress.trim(), txHash }).catch(() => {});
   res.json({ success: true, txHash });
 });
 
