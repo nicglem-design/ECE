@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfile } from "@/hooks/useProfile";
-import { apiPost } from "@/lib/apiClient";
+import { apiPost, apiFetch } from "@/lib/apiClient";
 import { PAIR_TO_COIN } from "@/lib/orderbook/types";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
@@ -20,6 +20,17 @@ interface OrderBookSnapshot {
   lastTradeTime: number | null;
 }
 
+interface Order {
+  id: string;
+  pair: string;
+  side: string;
+  price: number;
+  amount: number;
+  filled: number;
+  status: string;
+  createdAt: number;
+}
+
 export function LimitOrderWidget() {
   const { isAuthenticated } = useAuth();
   const { profile } = useProfile();
@@ -33,6 +44,47 @@ export function LimitOrderWidget() {
   const [success, setSuccess] = useState<string | null>(null);
   const [orderBook, setOrderBook] = useState<OrderBookSnapshot | null>(null);
   const [marketPrice, setMarketPrice] = useState<number | null>(null);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const fetchMyOrders = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await apiFetch("/api/market/orders?status=open&limit=20");
+      if (res.ok) {
+        const data = (await res.json()) as { orders?: Order[] };
+        setMyOrders(data.orders ?? []);
+      }
+    } catch {
+      setMyOrders([]);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    fetchMyOrders();
+    const id = setInterval(fetchMyOrders, 5000);
+    return () => clearInterval(id);
+  }, [fetchMyOrders]);
+
+  const handleCancelOrder = async (orderId: string) => {
+    setCancellingId(orderId);
+    try {
+      const res = await apiFetch(`/api/market/orders/${orderId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSuccess("Order cancelled");
+        fetchMyOrders();
+        fetchOrderBook();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const data = (await res.json()) as { error?: string };
+        setError(data.error ?? "Cancel failed");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancel failed");
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const fetchOrderBook = useCallback(async () => {
     try {
@@ -118,6 +170,7 @@ export function LimitOrderWidget() {
       setPrice("");
       setAmount("");
       fetchOrderBook();
+      fetchMyOrders();
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Order failed");
@@ -235,6 +288,36 @@ export function LimitOrderWidget() {
           {loading ? "Placing..." : `Place ${side} order`}
         </button>
       </div>
+
+      {isAuthenticated && myOrders.length > 0 && (
+        <div className="rounded-xl border border-slate-600 bg-slate-800/40 p-4">
+          <h4 className="mb-3 text-sm font-medium text-slate-400">My open orders</h4>
+          <div className="space-y-2 max-h-32 overflow-y-auto">
+            {myOrders.map((o) => (
+              <div
+                key={o.id}
+                className="flex items-center justify-between rounded-lg bg-slate-700/30 px-3 py-2 text-sm"
+              >
+                <div>
+                  <span className={o.side === "buy" ? "text-green-400" : "text-red-400"}>
+                    {o.side.toUpperCase()}
+                  </span>
+                  <span className="ml-2 text-slate-300">
+                    {o.pair.replace("USDT", "")} {o.amount - o.filled} @ {o.price.toLocaleString()}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleCancelOrder(o.id)}
+                  disabled={cancellingId === o.id}
+                  className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {cancellingId === o.id ? "..." : "Cancel"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {orderBook && (orderBook.bids.length > 0 || orderBook.asks.length > 0) && (
         <div className="rounded-xl border border-slate-600 bg-slate-800/40 p-4">

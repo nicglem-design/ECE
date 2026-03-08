@@ -1,6 +1,8 @@
 export * from "./types";
 export {
   placeOrder,
+  cancelOrder,
+  getOrdersByUser,
   getOrderBook,
   getLastTradePrice,
   getMidPrice,

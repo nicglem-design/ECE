@@ -9,6 +9,7 @@ import accountsRoutes from "./routes/accounts";
 import kycRoutes from "./routes/kyc";
 import aiRoutes from "./routes/ai";
 import { config } from "./config";
+import { apiLimiter, authLimiter } from "./middleware/rateLimit";
 
 const app = express();
 
@@ -18,9 +19,10 @@ if (!fs.existsSync(dataDir)) {
 }
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+app.use("/api/v1", apiLimiter);
 
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/auth", authLimiter, authRoutes);
 app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/accounts", accountsRoutes);

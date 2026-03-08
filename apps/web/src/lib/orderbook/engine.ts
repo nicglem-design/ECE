@@ -179,6 +179,35 @@ export function placeOrder(
   return { order, trades };
 }
 
+/** Cancel an open order. Returns true if cancelled, false if not found or not cancellable. */
+export function cancelOrder(orderId: string, userId: string): boolean {
+  const order = orders.get(orderId);
+  if (!order || order.userId !== userId) return false;
+  if (order.status !== "open") return false;
+
+  const { bids, asks } = getOrCreateBook(order.pair);
+  const ourBook = order.side === "buy" ? bids : asks;
+  const remaining = order.amount - order.filled;
+  if (remaining > 0) {
+    addToBook(ourBook, order.price, -remaining);
+  }
+  order.status = "cancelled";
+  persist();
+  return true;
+}
+
+/** Get orders for a user, optionally filtered by pair and status. */
+export function getOrdersByUser(
+  userId: string,
+  options?: { pair?: string; status?: Order["status"]; limit?: number }
+): Order[] {
+  const limit = options?.limit ?? 50;
+  let list = Array.from(orders.values()).filter((o) => o.userId === userId);
+  if (options?.pair) list = list.filter((o) => o.pair === options.pair);
+  if (options?.status) list = list.filter((o) => o.status === options.status);
+  return list.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+}
+
 /** Get order book snapshot for a pair. */
 export function getOrderBook(pair: string): OrderBookSnapshot {
   const { bids, asks } = getOrCreateBook(pair);

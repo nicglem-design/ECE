@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { placeOrder } from "@/lib/orderbook/engine";
+import { placeOrder, getOrdersByUser } from "@/lib/orderbook/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,28 @@ async function getUserIdFromAuth(authHeader: string | null): Promise<string | nu
     return data.id ?? null;
   } catch {
     return null;
+  }
+}
+
+/** GET: List user's orders. Requires auth. */
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get("authorization");
+    const userId = await getUserIdFromAuth(authHeader);
+    if (!userId) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+    const { searchParams } = new URL(request.url);
+    const pair = searchParams.get("pair") || undefined;
+    const status = searchParams.get("status") as "open" | "filled" | "partially_filled" | "cancelled" | undefined;
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10) || 50, 100);
+    const orders = getOrdersByUser(userId, { pair, status, limit });
+    return NextResponse.json({ orders });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to fetch orders" },
+      { status: 500 }
+    );
   }
 }
 

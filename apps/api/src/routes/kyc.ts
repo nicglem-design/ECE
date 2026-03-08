@@ -5,6 +5,32 @@ import { config } from "../config";
 
 const router = Router();
 
+/** Sumsub webhook: applicantReviewed. Updates KYC status when verification completes. */
+router.post("/webhook", (req: Request, res: Response) => {
+  res.status(200).send("OK"); // Ack immediately
+  const body = req.body as {
+    applicantId?: string;
+    externalUserId?: string;
+    reviewResult?: { reviewAnswer?: string };
+    type?: string;
+  };
+  const type = body.type;
+  if (type !== "applicantReviewed") return;
+  const userId = body.externalUserId || body.applicantId;
+  if (!userId) return;
+  const answer = body.reviewResult?.reviewAnswer;
+  const status = answer === "GREEN" ? "approved" : answer === "RED" ? "rejected" : null;
+  if (!status) return;
+  try {
+    const now = Date.now();
+    db.prepare(
+      "UPDATE kyc_status SET status = ?, updated_at = ? WHERE user_id = ?"
+    ).run(status, now, userId);
+  } catch (err) {
+    console.error("KYC webhook error:", err);
+  }
+});
+
 router.get("/status", authMiddleware, (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
