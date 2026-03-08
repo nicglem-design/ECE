@@ -4,6 +4,8 @@
  */
 
 import path from "path";
+import fs from "fs";
+import os from "os";
 
 const connectionString =
   process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
@@ -275,10 +277,14 @@ if (connectionString) {
 } else {
   // SQLite fallback (local dev)
   const Database = require("better-sqlite3");
-  const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "kanox.db");
-  db = new Database(dbPath);
+  let dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "kanox.db");
+  const dataDir = path.dirname(dbPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 
-  db.exec(`
+  function runSchema(database: typeof db) {
+    database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -450,22 +456,22 @@ if (connectionString) {
     );
   `);
 
-  try {
-    db.exec("ALTER TABLE linked_accounts ADD COLUMN stripe_account_id TEXT");
-  } catch {
-    /* column may exist */
-  }
-  try {
-    db.exec("ALTER TABLE profiles ADD COLUMN stripe_connect_account_id TEXT");
-  } catch {
-    /* column may exist */
-  }
-  try {
-    db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
-  } catch {
-    /* column may exist */
-  }
-  db.exec(`
+    try {
+      database.exec("ALTER TABLE linked_accounts ADD COLUMN stripe_account_id TEXT");
+    } catch {
+      /* column may exist */
+    }
+    try {
+      database.exec("ALTER TABLE profiles ADD COLUMN stripe_connect_account_id TEXT");
+    } catch {
+      /* column may exist */
+    }
+    try {
+      database.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      /* column may exist */
+    }
+    database.exec(`
     CREATE TABLE IF NOT EXISTS auth_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
@@ -489,6 +495,23 @@ if (connectionString) {
     CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
     CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
   `);
+  }
+
+  db = new Database(dbPath);
+  try {
+    runSchema(db);
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === "SQLITE_READONLY" || code === "SQLITE_CANTOPEN") {
+      db.close();
+      const fallbackPath = path.join(os.tmpdir(), "kanox.db");
+      console.warn(`Database path not writable (${dbPath}), using fallback: ${fallbackPath}`);
+      db = new Database(fallbackPath);
+      runSchema(db);
+    } else {
+      throw err;
+    }
+  }
 
   // Wrap SQLite sync API to return Promises (unified async interface)
   const origPrepare = db.prepare.bind(db);

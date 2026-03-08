@@ -42,4 +42,11 @@ app.get("/health", (_req, res) => {
 
 app.listen(config.port, () => {
   console.log(`API running on http://localhost:${config.port}`);
+  if (process.env.SEED_MARKET_MAKER_ON_START === "true" || process.env.SEED_MARKET_MAKER_ON_START === "1") {
+    import("./lib/marketMaker").then(({ seedMarketMaker }) => {
+      seedMarketMaker()
+        .then((r) => console.log(`Market maker seeded: ${r.ordersPlaced} orders across ${r.pairs} pairs`))
+        .catch((e) => console.error("Market maker seed failed:", e));
+    });
+  }
 });

@@ -136,8 +136,6 @@ export async function GET(request: NextRequest) {
   });
 }
 
-const API_BACKEND = process.env.API_BACKEND_URL || "http://localhost:4000";
-
 /** Call backend to update wallet balances. Returns { ok: true } or { ok: false, error } */
 async function executeWalletSwap(
   authHeader: string | null,

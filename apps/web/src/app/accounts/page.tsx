@@ -20,7 +20,7 @@ const QUICK_AMOUNTS = [50, 100, 250, 500, 1000, 2500];
 function AccountsContent() {
   const { t } = useLanguage();
   const { balances, loading, refetch } = useFiatBalances();
-  const { accounts, addAccount, removeAccount } = useLinkedAccounts();
+  const { accounts, addAccount, removeAccount, refetch: refetchLinked } = useLinkedAccounts();
   const [depositCurrency, setDepositCurrency] = useState("USD");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
@@ -45,10 +45,15 @@ function AccountsContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    apiGet<{ linked: boolean }>("/api/v1/accounts/connect-status")
-      .then((d) => setConnectLinked(d.linked))
+    apiGet<{ linked: boolean; linkedAccountId?: string }>("/api/v1/accounts/connect-status")
+      .then((d) => {
+        setConnectLinked(d.linked);
+        if (d.linked && (d.linkedAccountId || searchParams?.get("connect"))) {
+          refetchLinked();
+        }
+      })
       .catch(() => setConnectLinked(false));
-  }, [searchParams?.get("connect")]);
+  }, [searchParams?.get("connect"), refetchLinked]);
 
   const handleConnectBank = async () => {
     setConnectLoading(true);
@@ -370,7 +375,9 @@ function AccountsContent() {
                   </button>
                 )}
                 {connectLinked && (
-                  <p className="mt-1 text-xs text-green-500">Bank connected via Stripe</p>
+                  <p className="mt-1 text-xs text-green-500">
+                    Bank connected via Stripe Connect. Select above to withdraw.
+                  </p>
                 )}
               </div>
               {showWithdraw2FA && (

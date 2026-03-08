@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { db } from "../db";
+import { seedMarketMaker } from "../lib/marketMaker";
 import { isEVMChain } from "../crypto/custody";
 import { syncDepositsForUser } from "../crypto/depositSync";
 import { syncBitcoinDepositsForUser } from "../crypto/depositSync-bitcoin";
@@ -68,6 +69,26 @@ router.post("/sync-deposits", async (req: Request, res: Response) => {
     console.error("Cron sync-deposits error:", err);
     res.status(500).json({
       error: err instanceof Error ? err.message : "Sync failed",
+    });
+  }
+});
+
+/** POST /seed-market-maker - Seed order book with MM liquidity for instant swaps. */
+router.post("/seed-market-maker", async (req: Request, res: Response) => {
+  if (!isCronAuthorized(req)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const result = await seedMarketMaker();
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    console.error("Cron seed-market-maker error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Seed failed",
     });
   }
 });

@@ -152,7 +152,7 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
   }
 });
 
-/** GET /api/v1/accounts/connect-status - Check if Stripe Connect is linked */
+/** GET /api/v1/accounts/connect-status - Check if Stripe Connect is linked, with bank details */
 router.get("/connect-status", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
@@ -162,8 +162,44 @@ router.get("/connect-status", authMiddleware, async (req: Request, res: Response
   const row = (await db.prepare(
     "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
   ).get(user.sub)) as { stripe_connect_account_id: string | null } | undefined;
-  const linked = !!(row?.stripe_connect_account_id);
-  res.json({ linked });
+  const accountId = row?.stripe_connect_account_id;
+  const linked = !!accountId;
+
+  let bankDetails: { bankName?: string; last4?: string } | null = null;
+  let linkedAccountId: string | null = null;
+
+  if (stripe && accountId) {
+    try {
+      const account = await stripe.accounts.retrieve(accountId, {
+        expand: ["external_accounts.data"],
+      });
+      const ext = account.external_accounts?.data?.[0] as { object: string; bank_name?: string; last4?: string } | undefined;
+      if (ext && (ext.object === "bank_account" || ext.object === "card")) {
+        bankDetails = {
+          bankName: ext.bank_name ?? (ext as { brand?: string }).brand,
+          last4: ext.last4,
+        };
+        const existing = (await db.prepare(
+          "SELECT id FROM linked_accounts WHERE user_id = ? AND stripe_account_id = ?"
+        ).get(user.sub, accountId)) as { id: string } | undefined;
+        if (!existing) {
+          const id = `la_${uuidv4()}`;
+          const now = Date.now();
+          const label = bankDetails.bankName
+            ? `${bankDetails.bankName}${bankDetails.last4 ? ` ****${bankDetails.last4}` : ""}`
+            : "Connected bank account";
+          await db.prepare(
+            "INSERT INTO linked_accounts (id, user_id, type, label, last_four, stripe_account_id, created_at) VALUES (?, ?, 'bank', ?, ?, ?, ?)"
+          ).run(id, user.sub, label, bankDetails.last4 ?? null, accountId, now);
+          linkedAccountId = id;
+        }
+      }
+    } catch (err) {
+      console.error("Connect status fetch bank details:", err);
+    }
+  }
+
+  res.json({ linked, bankDetails: bankDetails ?? undefined, linkedAccountId: linkedAccountId ?? undefined });
 });
 
 /** POST /api/v1/accounts/deposit - Simulated fiat deposit (when Stripe not configured) */
