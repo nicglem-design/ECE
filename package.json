@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "test:e2e-fiat": "npx tsx scripts/e2e-fiat-flow.ts",
     "dev": "ulimit -n 65536 2>/dev/null || true; npm-run-all --parallel dev:web dev:api",
     "dev:web": "ulimit -n 65536 2>/dev/null || true; cd apps/web && npx next dev --hostname 127.0.0.1 --webpack",
     "dev:api": "cd apps/api && npm run build && node dist/main.js",
@@ -21,6 +22,7 @@
     "eslint": "^8.57.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.2.5",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   }
 }

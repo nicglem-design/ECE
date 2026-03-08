@@ -234,15 +234,23 @@ function AccountsContent() {
           </p>
 
           {kycRequired && kycStatus && kycStatus !== "approved" && (
-            <div className="mt-6 rounded-xl border border-amber-600/50 bg-amber-900/20 p-4">
-              <p className="text-amber-200">
-                Verify your identity to deposit or withdraw funds.
+            <div className={`mt-6 rounded-xl border p-4 ${
+              kycStatus === "rejected"
+                ? "border-red-600/50 bg-red-900/20"
+                : "border-amber-600/50 bg-amber-900/20"
+            }`}>
+              <p className={kycStatus === "rejected" ? "text-red-200" : "text-amber-200"}>
+                {kycStatus === "rejected"
+                  ? "Identity verification was not approved. Please contact support or try again with a different document."
+                  : "Verify your identity to deposit or withdraw funds."}
               </p>
               <Link
                 href="/kyc"
-                className="mt-2 inline-block text-sm font-medium text-amber-400 hover:text-amber-300"
+                className={`mt-2 inline-block text-sm font-medium hover:underline ${
+                  kycStatus === "rejected" ? "text-red-400 hover:text-red-300" : "text-amber-400 hover:text-amber-300"
+                }`}
               >
-                Verify identity →
+                {kycStatus === "rejected" ? "Try again" : "Verify identity →"}
               </Link>
             </div>
           )}

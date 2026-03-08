@@ -160,7 +160,10 @@ async function executeWalletSwap(
       }),
     });
     const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string };
-    if (!res.ok) return { ok: false, error: data.message || "Insufficient balance" };
+    if (!res.ok) {
+      const msg = data.message || "Insufficient balance";
+      return { ok: false, error: msg.includes("balance") ? "Insufficient balance. Deposit more funds or reduce the amount." : msg };
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: "Wallet update failed" };
@@ -260,7 +263,7 @@ export async function POST(request: NextRequest) {
         const pair = await getPairForCoin(toCoinId);
         if (!pair) {
           return NextResponse.json(
-            { error: `Could not resolve trading pair for ${toCoinId}` },
+            { error: `Trading pair not available for ${toCoinId}. Try BTC, ETH, SOL, or another supported asset.` },
             { status: 400 }
           );
         }
@@ -293,7 +296,7 @@ export async function POST(request: NextRequest) {
         const pair = await getPairForCoin(fromCoinId);
         if (!pair) {
           return NextResponse.json(
-            { error: `Could not resolve trading pair for ${fromCoinId}` },
+            { error: `Trading pair not available for ${fromCoinId}. Try BTC, ETH, SOL, or another supported asset.` },
             { status: 400 }
           );
         }
@@ -330,7 +333,7 @@ export async function POST(request: NextRequest) {
         ]);
         if (!fromPair || !toPair) {
           return NextResponse.json(
-            { error: "Could not resolve trading pairs for one or both assets" },
+            { error: "Trading pairs not available for one or both assets. Try supported pairs like BTC, ETH, SOL." },
             { status: 400 }
           );
         }

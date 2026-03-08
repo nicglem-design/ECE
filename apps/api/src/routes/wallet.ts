@@ -45,6 +45,7 @@ import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { parseEther } from "ethers";
 import { logAudit } from "../lib/audit";
 import { checkSendLimit } from "../lib/limits";
+import { increment } from "../lib/metrics";
 
 const SWAP_COINS = [
   { id: "tether", symbol: "USDT", name: "Tether" },
@@ -672,6 +673,7 @@ router.post("/swap-execution", authMiddleware, async (req: Request, res: Respons
       ).run(user.sub, toChain.id, toChain.symbol, toChain.name, toAmt, now);
     }
   }
+  increment("swaps_total");
   res.json({ success: true });
 });
 

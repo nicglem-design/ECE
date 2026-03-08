@@ -27,6 +27,16 @@ This starts the web app (port 3000) and the API (port 4000). If you see "Load fa
    ```
    Then open **http://127.0.0.1:3002**
 
+## E2E test
+
+With the API running (`npm run start:api`), run:
+
+```bash
+npm run test:e2e-fiat
+```
+
+Verifies: signup → deposit → buy crypto → sell crypto → withdraw. See [docs/PRODUCTION.md](docs/PRODUCTION.md#9-e2e-test-fiat-flow).
+
 ## Production deployment
 
 See **[docs/PRODUCTION.md](docs/PRODUCTION.md)** for full production setup: database, RPC URLs, Stripe, KYC, email, and cron configuration.

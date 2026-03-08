@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { logAudit } from "../lib/audit";
 import { checkWithdrawalLimit } from "../lib/limits";
 import { requireKycApproved } from "../lib/kyc";
+import { increment } from "../lib/metrics";
 
 const router = Router();
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
@@ -242,6 +243,7 @@ router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   await db.prepare(
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "deposit", numAmount, "completed", method || "card", now);
+  increment("fiat_deposits_total");
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 
@@ -321,7 +323,12 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
       });
     } catch (err) {
       status = "failed";
-      const msg = err instanceof Error ? err.message : "Bank transfer failed";
+      increment("withdraw_stripe_errors_total");
+      const stripeErr = err as { code?: string; message?: string };
+      let msg = stripeErr?.message || "Bank transfer failed";
+      if (stripeErr?.code === "balance_insufficient") msg = "Insufficient platform balance. Please try again later.";
+      else if (stripeErr?.code === "account_invalid" || stripeErr?.code === "invalid_request_error") msg = "Bank account issue. Please reconnect your bank in settings.";
+      else if (stripeErr?.code === "rate_limit_error") msg = "Too many requests. Please wait a moment and try again.";
       res.status(400).json({ message: msg });
       return;
     }
@@ -342,6 +349,7 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, destination, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "withdraw", numAmount, status, destination, now);
   logAudit(user.sub, "withdraw_fiat", { currency: curr, amount: numAmount, destination }).catch(() => {});
+  increment("fiat_withdrawals_total");
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 

@@ -14,8 +14,14 @@ import cronRoutes from "./routes/cron";
 import { handleStripeWebhook } from "./routes/stripeWebhook";
 import { config } from "./config";
 import { apiLimiter, authLimiter } from "./middleware/rateLimit";
+import { getReadyStatus } from "./lib/health";
+import { runStartupCheck } from "./lib/startupCheck";
+import { logger } from "./lib/logger";
+import { getMetrics } from "./lib/metrics";
 
 const app = express();
+
+runStartupCheck();
 
 const dataDir = path.join(process.cwd(), "data");
 if (!fs.existsSync(dataDir)) {
@@ -41,20 +47,38 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/health/ready", async (_req, res) => {
+  try {
+    const status = await getReadyStatus();
+    res.status(status.ok ? 200 : 503).json(status);
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      database: "error",
+      error: err instanceof Error ? err.message : "Health check failed",
+      timestamp: Date.now(),
+    });
+  }
+});
+
+app.get("/metrics", (_req, res) => {
+  res.json(getMetrics());
+});
+
 const server = app.listen(config.port, () => {
-  console.log(`API running on http://localhost:${config.port}`);
+  logger.info({ port: config.port }, "API running");
   if (process.env.SEED_MARKET_MAKER_ON_START === "true" || process.env.SEED_MARKET_MAKER_ON_START === "1") {
     import("./lib/marketMaker").then(({ seedMarketMaker }) => {
       seedMarketMaker()
-        .then((r) => console.log(`Market maker seeded: ${r.ordersPlaced} orders across ${r.pairs} pairs`))
-        .catch((e) => console.error("Market maker seed failed:", e));
+        .then((r) => logger.info({ ordersPlaced: r.ordersPlaced, pairs: r.pairs }, "Market maker seeded"))
+        .catch((e) => logger.error({ err: e }, "Market maker seed failed"));
     });
   }
 });
 
 server.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EADDRINUSE") {
-    console.error(`Port ${config.port} is already in use. Stop the other process or set PORT=4001`);
+    logger.error({ port: config.port }, "Port already in use");
     process.exit(1);
   }
   throw err;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFiatBalances } from "@/hooks/useFiatAccounts";
 import { apiPost } from "@/lib/apiClient";
 import { TokenLogo } from "@/components/TokenLogo";
 
@@ -34,6 +35,14 @@ const FIAT_COINS: SearchCoin[] = [
   { id: "gbp", symbol: "GBP", name: "British Pound" },
   { id: "sek", symbol: "SEK", name: "Swedish Krona" },
 ];
+
+/** Fiat to USD rate (1 unit = X USD) for price display */
+const FIAT_TO_USD: Record<string, number> = {
+  usd: 1,
+  eur: 1.08,
+  gbp: 1.27,
+  sek: 0.09,
+};
 
 function CoinSelector({
   coin,
@@ -131,7 +140,16 @@ interface SwapWidgetProps {
 export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
   const { currency } = useCurrency();
   const { isAuthenticated } = useAuth();
+  const { balances: fiatBalances } = useFiatBalances();
+  const hasUsdBalance = fiatBalances.some((b) => b.currency === "USD" && b.amount > 0);
   const [fromCoin, setFromCoin] = useState<SearchCoin | null>({ id: "tether", symbol: "USDT", name: "Tether" });
+  const suggestedFiatRef = useRef(false);
+  useEffect(() => {
+    if (hasUsdBalance && !suggestedFiatRef.current && fromCoin?.id === "tether") {
+      suggestedFiatRef.current = true;
+      setFromCoin({ id: "usd", symbol: "USD", name: "US Dollar" });
+    }
+  }, [hasUsdBalance, fromCoin?.id]);
   const [toCoin, setToCoin] = useState<SearchCoin | null>(
     initialBuyCoinId ? null : { id: "bitcoin", symbol: "BTC", name: "Bitcoin" }
   );
@@ -207,7 +225,7 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
       );
       setAllCoins([...FIAT_COINS, ...mapped]);
     } catch {
-      setAllCoins(POPULAR_COINS);
+      setAllCoins([...FIAT_COINS, ...POPULAR_COINS]);
     }
   }, [allCoins.length, currency]);
 
@@ -333,6 +351,9 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
 
   const fetchFromTokenPrice = useCallback(async (): Promise<number | null> => {
     if (!fromCoin) return null;
+    if (FIAT_COINS.some((f) => f.id === fromCoin.id)) {
+      return FIAT_TO_USD[fromCoin.id.toLowerCase()] ?? 1;
+    }
     if (STABLECOINS.includes(fromCoin.id)) return 1;
     try {
       // 1. Try coin-price API first (single coin, most reliable for conversion)
@@ -565,6 +586,11 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-600 bg-slate-800/40 p-4">
         <label className="mb-2 block text-sm font-medium text-slate-400">You spend</label>
+        {hasUsdBalance && fromCoin?.id !== "usd" && (
+          <p className="mb-2 text-xs text-green-400/90">
+            You have {fiatBalances.find((b) => b.currency === "USD")?.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD deposited — select USD to buy with balance
+          </p>
+        )}
         <p className="mb-2 text-xs text-slate-500">Type amount in {fromCoin?.symbol ?? "token"} or {currency.toUpperCase()} — both convert automatically</p>
         <div className="flex gap-2">
           <div className="w-40 shrink-0">
