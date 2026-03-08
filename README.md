@@ -26,3 +26,7 @@ This starts the web app (port 3000) and the API (port 4000). If you see "Load fa
    npm run dev:web-alt
    ```
    Then open **http://127.0.0.1:3002**
+
+## Production deployment
+
+See **[docs/PRODUCTION.md](docs/PRODUCTION.md)** for full production setup: database, RPC URLs, Stripe, KYC, email, and cron configuration.

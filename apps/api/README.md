@@ -45,13 +45,12 @@ When `WALLET_ENCRYPTION_KEY` (or `JWT_SECRET`) is set and RPC URLs are configure
 
 RPC URLs default to public endpoints. For production, use Infura/Alchemy.
 
-## Stripe payments
+## Fiat deposits & withdrawals
 
-When `STRIPE_SECRET_KEY` is set:
-
-- **Pay with card**: `POST /api/v1/accounts/create-checkout` creates a Checkout session
-- **Webhook**: Configure Stripe to POST to `https://your-api/api/v1/accounts/stripe-webhook` for `checkout.session.completed`
-- **Connect onboarding**: `POST /api/v1/accounts/connect-onboarding` creates a Stripe Connect Express account link for real bank withdrawals. Set `STRIPE_CONNECT_RETURN_URL` and `STRIPE_CONNECT_REFRESH_URL` for production.
+- **Card or Apple Pay**: When `STRIPE_SECRET_KEY` is set, `POST /api/v1/accounts/create-checkout` creates a Stripe Checkout session. Apple Pay appears automatically on Safari when the customer has it configured.
+- **Manual deposit**: `POST /api/v1/accounts/deposit` adds funds without a payment provider.
+- **Withdrawals**: `POST /api/v1/accounts/withdraw` sends to bank via Stripe Connect when user has linked a bank.
+- **KYC**: When `SUMSUB_APP_TOKEN` is set, deposits and withdrawals require KYC approval. Without it, no enforcement (stub mode).
 
 ## Endpoints
 

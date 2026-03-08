@@ -17,10 +17,21 @@ import { getCurrencySymbol } from "@/lib/currencies";
 const FIAT_CURRENCIES = ["USD", "EUR", "GBP", "SEK"];
 const QUICK_AMOUNTS = [50, 100, 250, 500, 1000, 2500];
 
+interface ConnectStatus {
+  linked: boolean;
+  bankDetails?: { bankName?: string; last4?: string };
+  linkedAccountId?: string;
+}
+
 function AccountsContent() {
+  const searchParams = useSearchParams();
   const { t } = useLanguage();
   const { balances, loading, refetch } = useFiatBalances();
   const { accounts, addAccount, removeAccount, refetch: refetchLinked } = useLinkedAccounts();
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [kycStatus, setKycStatus] = useState<string | null>(null);
+  const [kycRequired, setKycRequired] = useState(false);
   const [depositCurrency, setDepositCurrency] = useState("USD");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
@@ -40,33 +51,58 @@ function AccountsContent() {
   const [addLastFour, setAddLastFour] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [connectLinked, setConnectLinked] = useState<boolean | null>(null);
-  const [connectLoading, setConnectLoading] = useState(false);
-  const searchParams = useSearchParams();
+
+  const fetchConnectStatus = async () => {
+    try {
+      const data = await apiGet<ConnectStatus>("/api/v1/accounts/connect-status");
+      setConnectStatus(data);
+      if (data.linkedAccountId) refetchLinked();
+    } catch {
+      setConnectStatus({ linked: false });
+    }
+  };
+
+  const fetchKycStatus = async () => {
+    try {
+      const data = await apiGet<{ kycStatus: string }>("/api/v1/kyc/status");
+      setKycStatus(data.kycStatus);
+    } catch {
+      setKycStatus("pending");
+    }
+  };
 
   useEffect(() => {
-    apiGet<{ linked: boolean; linkedAccountId?: string }>("/api/v1/accounts/connect-status")
-      .then((d) => {
-        setConnectLinked(d.linked);
-        if (d.linked && (d.linkedAccountId || searchParams?.get("connect"))) {
-          refetchLinked();
-        }
-      })
-      .catch(() => setConnectLinked(false));
-  }, [searchParams?.get("connect"), refetchLinked]);
+    fetchConnectStatus();
+    fetchKycStatus();
+  }, []);
+
+  useEffect(() => {
+    const connect = searchParams.get("connect");
+    if (connect === "success" || connect === "refresh") {
+      fetchConnectStatus();
+    }
+  }, [searchParams]);
 
   const handleConnectBank = async () => {
     setConnectLoading(true);
     try {
-      const data = await apiPost<{ url?: string }>("/api/v1/accounts/connect-onboarding", {});
-      if (data.url) window.location.href = data.url;
-    } catch {
+      const data = await apiPost<{ url?: string; message?: string }>(
+        "/api/v1/accounts/connect-onboarding",
+        {}
+      );
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setWithdrawError(data.message || "Connect not available");
+      }
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "Connect failed");
+    } finally {
       setConnectLoading(false);
     }
-    setConnectLoading(false);
   };
 
-  const handlePayWithCard = async () => {
+  const handlePayWithCardOrApplePay = async () => {
     const amt = parseFloat(depositAmount);
     if (isNaN(amt) || amt <= 0) {
       setDepositError("Enter a valid amount");
@@ -88,10 +124,10 @@ function AccountsContent() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        setDepositError(data.message || "Checkout not available");
+        setDepositError(data.message || "Payment not available");
       }
     } catch (err) {
-      setDepositError(err instanceof Error ? err.message : "Checkout failed");
+      setDepositError(err instanceof Error ? err.message : "Payment failed");
     } finally {
       setCheckoutLoading(false);
     }
@@ -197,6 +233,20 @@ function AccountsContent() {
             Deposit money to buy crypto, or withdraw to your bank or card.
           </p>
 
+          {kycRequired && kycStatus && kycStatus !== "approved" && (
+            <div className="mt-6 rounded-xl border border-amber-600/50 bg-amber-900/20 p-4">
+              <p className="text-amber-200">
+                Verify your identity to deposit or withdraw funds.
+              </p>
+              <Link
+                href="/kyc"
+                className="mt-2 inline-block text-sm font-medium text-amber-400 hover:text-amber-300"
+              >
+                Verify identity →
+              </Link>
+            </div>
+          )}
+
           {/* Fiat balances */}
           <div className="mt-6 rounded-xl border border-slate-600 bg-slate-800/40 p-4">
             <h2 className="text-lg font-semibold text-slate-200">Your balance</h2>
@@ -231,7 +281,7 @@ function AccountsContent() {
           <div className="mt-6 rounded-xl border border-slate-600 bg-slate-800/40 p-4">
             <h2 className="text-lg font-semibold text-green-400">Deposit</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Add money to your account to buy crypto. Simulated for testing.
+              Add money to your account to buy crypto.
             </p>
             <div className="mt-4 space-y-4">
               <div>
@@ -274,11 +324,11 @@ function AccountsContent() {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={handlePayWithCard}
+                  onClick={handlePayWithCardOrApplePay}
                   disabled={checkoutLoading || depositLoading || !depositAmount}
                   className="flex-1 rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
                 >
-                  {checkoutLoading ? "Redirecting..." : "Pay with card"}
+                  {checkoutLoading ? "Redirecting..." : "Card or Apple Pay"}
                 </button>
                 <button
                   onClick={handleDeposit}
@@ -355,30 +405,13 @@ function AccountsContent() {
                   onChange={(e) => setWithdrawAccount(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-slate-200"
                 >
-                  <option value="">
-                    {connectLinked ? "Connected bank account" : "External account"}
-                  </option>
+                  <option value="">External account</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label} {a.last_four ? `****${a.last_four}` : ""}
                     </option>
                   ))}
                 </select>
-                {connectLinked === false && (
-                  <button
-                    type="button"
-                    onClick={handleConnectBank}
-                    disabled={connectLoading}
-                    className="mt-2 text-sm text-sky-400 hover:text-sky-300"
-                  >
-                    {connectLoading ? "Connecting..." : "Connect bank for real withdrawals"}
-                  </button>
-                )}
-                {connectLinked && (
-                  <p className="mt-1 text-xs text-green-500">
-                    Bank connected via Stripe Connect. Select above to withdraw.
-                  </p>
-                )}
               </div>
               {showWithdraw2FA && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
@@ -416,6 +449,31 @@ function AccountsContent() {
             {withdrawError && (
               <div className="mt-3 rounded-lg border border-red-800/50 bg-red-900/20 px-4 py-2 text-sm text-red-400">
                 {withdrawError}
+              </div>
+            )}
+          </div>
+
+          {/* Connect bank for real withdrawals */}
+          <div className="mt-6 rounded-xl border border-slate-600 bg-slate-800/40 p-4">
+            <h2 className="text-lg font-semibold text-slate-200">Bank withdrawals</h2>
+            {connectStatus?.linked ? (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-green-900/20 px-4 py-3">
+                <span className="text-green-400">
+                  ✓ Connected{connectStatus.bankDetails?.last4 ? ` ****${connectStatus.bankDetails.last4}` : ""}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <p className="text-sm text-slate-500">
+                  Connect your bank to withdraw fiat to your account.
+                </p>
+                <button
+                  onClick={handleConnectBank}
+                  disabled={connectLoading}
+                  className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {connectLoading ? "Connecting..." : "Connect bank"}
+                </button>
               </div>
             )}
           </div>

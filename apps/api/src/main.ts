@@ -11,6 +11,7 @@ import aiRoutes from "./routes/ai";
 import marketRoutes from "./routes/market";
 import twofaRoutes from "./routes/twofa";
 import cronRoutes from "./routes/cron";
+import { handleStripeWebhook } from "./routes/stripeWebhook";
 import { config } from "./config";
 import { apiLimiter, authLimiter } from "./middleware/rateLimit";
 
@@ -22,7 +23,7 @@ if (!fs.existsSync(dataDir)) {
 }
 
 app.use(cors({ origin: true, credentials: true }));
-app.use("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }));
+app.post("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.use(express.json({ limit: "100kb" }));
 app.use("/api/v1", apiLimiter);
 
@@ -40,7 +41,7 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`API running on http://localhost:${config.port}`);
   if (process.env.SEED_MARKET_MAKER_ON_START === "true" || process.env.SEED_MARKET_MAKER_ON_START === "1") {
     import("./lib/marketMaker").then(({ seedMarketMaker }) => {
@@ -49,4 +50,12 @@ app.listen(config.port, () => {
         .catch((e) => console.error("Market maker seed failed:", e));
     });
   }
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`Port ${config.port} is already in use. Stop the other process or set PORT=4001`);
+    process.exit(1);
+  }
+  throw err;
 });

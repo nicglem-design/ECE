@@ -7,6 +7,7 @@ import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { v4 as uuidv4 } from "uuid";
 import { logAudit } from "../lib/audit";
 import { checkWithdrawalLimit } from "../lib/limits";
+import { requireKycApproved } from "../lib/kyc";
 
 const router = Router();
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
@@ -43,66 +44,7 @@ router.get("/fiat", authMiddleware, async (req: Request, res: Response) => {
   res.json({ balances });
 });
 
-/** POST /api/v1/accounts/create-checkout - Create Stripe Checkout session for real deposit */
-router.post("/create-checkout", authMiddleware, async (req: Request, res: Response) => {
-  const user = (req as Request & { user?: { sub: string } }).user;
-  if (!user) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  if (!stripe) {
-    res.status(503).json({ message: "Stripe not configured. Set STRIPE_SECRET_KEY." });
-    return;
-  }
-  const { currency, amount, successUrl, cancelUrl } = req.body;
-  const curr = (currency || "USD").toUpperCase();
-  if (!SUPPORTED_FIAT.includes(curr)) {
-    res.status(400).json({ message: "Unsupported currency" });
-    return;
-  }
-  const numAmount = parseFloat(String(amount));
-  if (isNaN(numAmount) || numAmount <= 0 || numAmount > 10000) {
-    res.status(400).json({ message: "Amount must be between 0 and 10000" });
-    return;
-  }
-  const amountCents = Math.round(numAmount * 100);
-  if (amountCents < 50) {
-    res.status(400).json({ message: "Minimum deposit is 0.50" });
-    return;
-  }
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [{
-        price_data: {
-          currency: curr.toLowerCase(),
-          product_data: {
-            name: "Deposit to KanoXchange",
-            description: `Add ${numAmount} ${curr} to your account`,
-          },
-          unit_amount: amountCents,
-        },
-        quantity: 1,
-      }],
-      mode: "payment",
-      success_url: successUrl || config.stripeSuccessUrl,
-      cancel_url: cancelUrl || config.stripeCancelUrl,
-      client_reference_id: user.sub,
-      metadata: { userId: user.sub, currency: curr, amount: String(numAmount) },
-    });
-    const paymentId = `pay_${session.id}`;
-    const now = Date.now();
-    await db.prepare(
-      "INSERT INTO stripe_payments (id, user_id, currency, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(paymentId, user.sub, curr, numAmount, "pending", now);
-    res.json({ url: session.url, sessionId: session.id });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Checkout failed";
-    res.status(500).json({ message: msg });
-  }
-});
-
-/** POST /api/v1/accounts/connect-onboarding - Create Stripe Connect onboarding link for withdrawals */
+/** POST /api/v1/accounts/connect-onboarding - Create Stripe Connect Express account link for bank withdrawals */
 router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
@@ -110,12 +52,12 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
     return;
   }
   if (!stripe) {
-    res.status(503).json({ message: "Stripe not configured. Set STRIPE_SECRET_KEY." });
+    res.status(503).json({ message: "Withdrawals not configured. Set STRIPE_SECRET_KEY." });
     return;
   }
   try {
     const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
-    const email = userRow?.email || `user-${user.sub}@kanox.local`;
+    const email = userRow?.email || `user-${user.sub}@ece.local`;
     const profileRow = (await db.prepare(
       "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
     ).get(user.sub)) as { stripe_connect_account_id: string | null } | undefined;
@@ -152,7 +94,7 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
   }
 });
 
-/** GET /api/v1/accounts/connect-status - Check if Stripe Connect is linked, with bank details */
+/** GET /api/v1/accounts/connect-status - Check if Stripe Connect bank is linked */
 router.get("/connect-status", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
@@ -182,7 +124,9 @@ router.get("/connect-status", authMiddleware, async (req: Request, res: Response
         const existing = (await db.prepare(
           "SELECT id FROM linked_accounts WHERE user_id = ? AND stripe_account_id = ?"
         ).get(user.sub, accountId)) as { id: string } | undefined;
-        if (!existing) {
+        if (existing) {
+          linkedAccountId = existing.id;
+        } else {
           const id = `la_${uuidv4()}`;
           const now = Date.now();
           const label = bankDetails.bankName
@@ -202,11 +146,80 @@ router.get("/connect-status", authMiddleware, async (req: Request, res: Response
   res.json({ linked, bankDetails: bankDetails ?? undefined, linkedAccountId: linkedAccountId ?? undefined });
 });
 
-/** POST /api/v1/accounts/deposit - Simulated fiat deposit (when Stripe not configured) */
+/** POST /api/v1/accounts/create-checkout - Create Stripe Checkout for deposit (card + Apple Pay) */
+router.post("/create-checkout", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const kycCheck = await requireKycApproved(user.sub);
+  if (!kycCheck.ok) {
+    res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
+    return;
+  }
+  if (!stripe) {
+    res.status(503).json({ message: "Payment not configured. Set STRIPE_SECRET_KEY." });
+    return;
+  }
+  const { currency, amount, successUrl, cancelUrl } = req.body;
+  const curr = (currency || "USD").toUpperCase();
+  if (!SUPPORTED_FIAT.includes(curr)) {
+    res.status(400).json({ message: "Unsupported currency" });
+    return;
+  }
+  const numAmount = parseFloat(String(amount));
+  if (isNaN(numAmount) || numAmount <= 0 || numAmount > 10000) {
+    res.status(400).json({ message: "Amount must be between 0 and 10000" });
+    return;
+  }
+  const amountCents = Math.round(numAmount * 100);
+  if (amountCents < 50) {
+    res.status(400).json({ message: "Minimum deposit is 0.50" });
+    return;
+  }
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: curr.toLowerCase(),
+          product_data: {
+            name: "Deposit to ECE",
+            description: `Add ${numAmount} ${curr} to your account`,
+          },
+          unit_amount: amountCents,
+        },
+        quantity: 1,
+      }],
+      mode: "payment",
+      success_url: successUrl || config.stripeSuccessUrl,
+      cancel_url: cancelUrl || config.stripeCancelUrl,
+      client_reference_id: user.sub,
+      metadata: { userId: user.sub, currency: curr, amount: String(numAmount) },
+    });
+    const paymentId = `pay_${session.id}`;
+    const now = Date.now();
+    await db.prepare(
+      "INSERT INTO stripe_payments (id, user_id, currency, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(paymentId, user.sub, curr, numAmount, "pending", now);
+    res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Checkout failed";
+    res.status(500).json({ message: msg });
+  }
+});
+
+/** POST /api/v1/accounts/deposit - Add fiat to account (manual/demo) */
 router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const kycCheck = await requireKycApproved(user.sub);
+  if (!kycCheck.ok) {
+    res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
     return;
   }
   const { currency, amount, method } = req.body;
@@ -232,49 +245,16 @@ router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 
-/** POST /api/v1/accounts/stripe-webhook - Stripe webhook for payment completion */
-router.post("/stripe-webhook", async (req: Request, res: Response) => {
-  if (!stripe || !config.stripeWebhookSecret) {
-    res.status(503).send("Stripe webhook not configured");
-    return;
-  }
-  const sig = req.headers["stripe-signature"] as string;
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      config.stripeWebhookSecret
-    );
-  } catch (err) {
-    res.status(400).send(`Webhook Error: ${err instanceof Error ? err.message : "Unknown"}`);
-    return;
-  }
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const userId = session.client_reference_id || session.metadata?.userId;
-    const amount = parseFloat(session.metadata?.amount || "0");
-    const currency = (session.metadata?.currency || "USD").toUpperCase();
-    if (userId && amount > 0 && SUPPORTED_FIAT.includes(currency)) {
-      const now = Date.now();
-      await ensureFiatBalance(userId, currency);
-      await db.prepare(
-        "UPDATE fiat_balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND currency = ?"
-      ).run(amount, now, userId, currency);
-      const txId = `fiat_dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
-      await db.prepare(
-        "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).run(txId, userId, currency, "deposit", amount, "completed", "stripe", now);
-    }
-  }
-  res.json({ received: true });
-});
-
-/** POST /api/v1/accounts/withdraw - Withdraw fiat to linked account or card */
+/** POST /api/v1/accounts/withdraw - Withdraw fiat to bank (Stripe Connect) or record only */
 router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const kycCheck = await requireKycApproved(user.sub);
+  if (!kycCheck.ok) {
+    res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
     return;
   }
   const { currency, amount, linkedAccountId, totpCode } = req.body;
@@ -306,6 +286,7 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     res.status(400).json({ message: "Insufficient balance" });
     return;
   }
+
   let destination = "External account";
   let stripeAccountId: string | null = null;
   if (linkedAccountId) {
@@ -313,7 +294,7 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
       "SELECT label, last_four, stripe_account_id FROM linked_accounts WHERE id = ? AND user_id = ?"
     ).get(linkedAccountId, user.sub)) as { label: string; last_four: string; stripe_account_id: string | null } | undefined;
     if (linked) {
-      destination = `${linked.label} ****${linked.last_four || ""}`;
+      destination = `${linked.label}${linked.last_four ? ` ****${linked.last_four}` : ""}`;
       stripeAccountId = linked.stripe_account_id ?? null;
     }
   }
@@ -340,10 +321,16 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
       });
     } catch (err) {
       status = "failed";
-      const msg = err instanceof Error ? err.message : "Stripe transfer failed";
+      const msg = err instanceof Error ? err.message : "Bank transfer failed";
       res.status(400).json({ message: msg });
       return;
     }
+  } else if (!stripeAccountId && numAmount >= 1) {
+    res.status(400).json({
+      message: "Connect your bank account to withdraw. Click 'Connect bank' below.",
+      code: "BANK_REQUIRED",
+    });
+    return;
   }
 
   const now = Date.now();

@@ -38,7 +38,9 @@ router.get("/status", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
   const row = (await db.prepare("SELECT status FROM kyc_status WHERE user_id = ?").get(user.sub)) as { status: string } | undefined;
-  res.json({ kycStatus: row?.status || "pending" });
+  const kycStatus = row?.status || "pending";
+  const kycRequired = !!config.sumsubAppToken; // When KYC is configured, deposits/withdrawals require approval
+  res.json({ kycStatus, kycRequired });
 });
 
 router.post("/access-token", authMiddleware, async (req: Request, res: Response) => {

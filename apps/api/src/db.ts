@@ -283,7 +283,7 @@ if (connectionString) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  function runSchema(database: typeof db) {
+  function runSchema(database: { exec: (sql: string) => void }) {
     database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
