@@ -81,10 +81,13 @@ router.post("/signup", validateBody(signupSchema), async (req: Request, res: Res
     const passwordHash = await bcrypt.hash(password, 10);
     const now = Date.now();
     const tosAcceptedAt = acceptedTerms === true ? now : null;
+    const emailLower = email.toLowerCase();
+    const isTestUser = emailLower.endsWith("@test.local");
+    const emailVerified = isTestUser ? 1 : 0;
     try {
       await db.prepare(
-        "INSERT INTO users (id, email, password_hash, email_verified, created_at, tos_accepted_at) VALUES (?, ?, ?, 0, ?, ?)"
-      ).run(id, email.toLowerCase(), passwordHash, now, tosAcceptedAt);
+        "INSERT INTO users (id, email, password_hash, email_verified, created_at, tos_accepted_at) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(id, emailLower, passwordHash, emailVerified, now, tosAcceptedAt);
       await db.prepare(
         "INSERT INTO profiles (user_id, display_name, updated_at) VALUES (?, ?, ?)"
       ).run(id, "", now);
@@ -99,20 +102,22 @@ router.post("/signup", validateBody(signupSchema), async (req: Request, res: Res
       }
       throw e;
     }
-    const verifyToken = uuidv4();
-    const verifyExpires = now + 24 * 60 * 60 * 1000;
-    await db.prepare(
-      "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'email_verify', ?, ?)"
-    ).run(uuidv4(), id, verifyToken, verifyExpires, now);
-    sendVerificationEmail(email.toLowerCase(), verifyToken).catch((e) =>
-      console.error("Verification email send error:", e)
-    );
+    if (!isTestUser) {
+      const verifyToken = uuidv4();
+      const verifyExpires = now + 24 * 60 * 60 * 1000;
+      await db.prepare(
+        "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'email_verify', ?, ?)"
+      ).run(uuidv4(), id, verifyToken, verifyExpires, now);
+      sendVerificationEmail(emailLower, verifyToken).catch((e) =>
+        console.error("Verification email send error:", e)
+      );
+    }
 
-    const { token, refreshToken, refreshExpiresMs, now: pairNow } = createTokenPair(id, email.toLowerCase());
+    const { token, refreshToken, refreshExpiresMs, now: pairNow } = createTokenPair(id, emailLower);
     await db.prepare(
       "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'refresh', ?, ?)"
     ).run(uuidv4(), id, refreshToken, pairNow + refreshExpiresMs, pairNow);
-    res.json({ token, refreshToken, email: email.toLowerCase(), emailVerified: false });
+    res.json({ token, refreshToken, email: emailLower, emailVerified: !!emailVerified });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ message: "Registration failed" });

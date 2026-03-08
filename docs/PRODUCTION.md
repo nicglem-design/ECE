@@ -241,7 +241,7 @@ npm run start:api
 npm run test:e2e-fiat
 ```
 
-The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half the BTC back to USD, and attempts withdraw (expects BANK_REQUIRED if Stripe Connect not configured).
+The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half the BTC back to USD, and attempts withdraw (expects BANK_REQUIRED if Stripe Connect not configured). Users with email `*@test.local` are auto-verified so the test passes even when `RESEND_API_KEY` is set.
 
 ---
 

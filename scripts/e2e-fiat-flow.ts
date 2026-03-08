@@ -5,7 +5,7 @@
  * Requires: API running on http://localhost:4000
  *
  * Flow:
- * 1. Sign up test user
+ * 1. Sign up test user (e2e-*@test.local – auto-verified when RESEND is configured)
  * 2. Login
  * 3. Manual deposit (simulates Stripe deposit)
  * 4. Swap USD → BTC (buy crypto with fiat)
