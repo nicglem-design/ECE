@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { KanoXLogo } from "@/components/KanoXLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CryptoListWidget } from "@/components/CryptoListWidget";
@@ -30,9 +31,7 @@ export default function ExchangePage() {
       <main className="min-h-screen bg-slate-950">
         <header className="border-b border-slate-800/50">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-xl font-bold text-amber-400 hover:text-amber-300">
-              {t("nav.kanox")}
-            </Link>
+            <KanoXLogo label={t("nav.kanox")} variant="amber" size="md" />
             <div className="flex gap-6">
               <Link href="/wallet" className="text-sm text-slate-400 hover:text-sky-400">
                 {t("nav.wallet")}

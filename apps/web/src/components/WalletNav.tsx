@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { KanoXLogo } from "./KanoXLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { TerminologyToggle } from "./TerminologyToggle";
 import { AskKanoButton } from "./AskKanoButton";
@@ -17,9 +18,7 @@ export function WalletNav() {
   return (
     <header className="border-b border-slate-800/50">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="text-xl font-bold text-sky-400 hover:text-sky-300">
-          {t("nav.kanox")}
-        </Link>
+        <KanoXLogo label={t("nav.kanox")} variant="sky" size="md" />
         <div className="flex items-center gap-4">
           <Link
             href="/wallet"

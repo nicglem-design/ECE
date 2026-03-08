@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { KanoXLogo } from "@/components/KanoXLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
 import { TopCryptoWidget } from "@/components/TopCryptoWidget";
@@ -17,9 +18,7 @@ export default function HomePage() {
       <header className="relative overflow-hidden border-b border-slate-800/50">
         <div className="absolute inset-0 bg-gradient-to-br from-sky-900/20 via-transparent to-amber-900/10" />
         <nav className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <span className="text-xl font-bold tracking-tight text-sky-400">
-            {t("nav.kanox")}
-          </span>
+          <KanoXLogo label={t("nav.kanox")} variant="sky" size="md" />
           <div className="flex gap-6">
             <Link href="/wallet" className="text-sm text-slate-400 transition hover:text-sky-400">
               {t("nav.wallet")}
@@ -133,12 +132,18 @@ export default function HomePage() {
         </div>
       </section>
       <footer className="border-t border-slate-800/50 py-12">
-        <div className="mx-auto max-w-6xl px-6 text-center text-sm text-slate-500">
-          © {new Date().getFullYear()} KanoXchange.com. {t("home.footer")}
-          {" · "}
-          <Link href="/terms" className="text-sky-400 hover:underline">{t("legal.terms")}</Link>
-          {" · "}
-          <Link href="/privacy" className="text-sky-400 hover:underline">{t("legal.privacy")}</Link>
+        <div className="mx-auto max-w-6xl px-6 flex flex-col items-center gap-4 text-sm text-slate-500">
+          <div className="flex items-center gap-2">
+            <KanoXLogo label="KanoXchange.com" variant="sky" size="sm" asSpan />
+          </div>
+          <p>
+            © {new Date().getFullYear()} {t("home.footer")}
+          </p>
+          <span className="flex items-center justify-center gap-2">
+            <Link href="/terms" className="text-sky-400 hover:underline">{t("legal.terms")}</Link>
+            {" · "}
+            <Link href="/privacy" className="text-sky-400 hover:underline">{t("legal.privacy")}</Link>
+          </span>
         </div>
       </footer>
     </main>

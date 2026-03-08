@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTerminology } from "@/contexts/TerminologyContext";
-import { useChartMode } from "@/contexts/ChartModeContext";
 import { useWalletBalances } from "@/hooks/useWallet";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
@@ -60,7 +59,6 @@ export default function PortfolioPage() {
   const { t } = useLanguage();
   const { isPro } = useTerminology();
   const { currency } = useCurrency();
-  const { chartMode, setChartMode } = useChartMode();
   const { assets, loading } = useWalletBalances();
   const [totalValue, setTotalValue] = useState(0);
   const [changePct, setChangePct] = useState<number | null>(null);
@@ -159,36 +157,12 @@ export default function PortfolioPage() {
                   )}
                 </div>
               </div>
-              <div className="mt-8 flex flex-col gap-3">
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setChartMode("simple")}
-                    className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      chartMode === "simple"
-                        ? "bg-amber-500 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                    }`}
-                  >
-                    {t("portfolio.chartSimple")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setChartMode("complex")}
-                    className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      chartMode === "complex"
-                        ? "bg-amber-500 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                    }`}
-                  >
-                    {t("portfolio.chartComplex")}
-                  </button>
-                </div>
+              <div className="mt-8">
                 <PortfolioChart
                   assets={assets}
                   onTotalChange={onTotalChange}
                   useCoinsTerminology={!isPro}
-                  chartMode={chartMode}
+                  chartMode="complex"
                 />
               </div>
               <div className="mt-8 space-y-4">
@@ -210,7 +184,7 @@ export default function PortfolioPage() {
                         chainId={a.chainId}
                         price={assetPrices[a.chainId]}
                         prices={assetSparklines[a.chainId] ?? []}
-                        chartMode={chartMode}
+                        chartMode="complex"
                       />
                     </div>
                     <div className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
