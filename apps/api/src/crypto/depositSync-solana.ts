@@ -52,25 +52,25 @@ export async function syncSolanaDepositsForUser(userId: string, address: string)
   let count = 0;
 
   for (const { signature, amount } of transfers) {
-    const existing = db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(signature);
+    const existing = await db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(signature);
     if (existing) continue;
 
     const amountSol = amount / LAMPORTS_PER_SOL;
     const txId = `dep_${signature}_${userId}`;
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(txId, userId, "solana", "received", String(amountSol), "unknown", address, signature, now);
 
-    const row = db.prepare(
+    const row = (await db.prepare(
       "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
-    ).get(userId, "solana") as { amount: number } | undefined;
+    ).get(userId, "solana")) as { amount: number } | undefined;
     if (row) {
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(amountSol, now, userId, "solana");
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(userId, "solana", "SOL", "Solana", amountSol, now);
     }

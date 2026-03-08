@@ -30,25 +30,25 @@ export async function syncLitecoinDepositsForUser(userId: string, address: strin
       if (out.scriptpubkey_address === address) totalReceived += out.value;
     }
     if (totalReceived <= 0) continue;
-    const existing = db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(tx.txid);
+    const existing = await db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(tx.txid);
     if (existing) continue;
 
     const amountLtc = totalReceived / SATOSHI_PER_LTC;
     const txId = `dep_${tx.txid}_${userId}`;
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(txId, userId, "litecoin", "received", String(amountLtc), "unknown", address, tx.txid, now);
 
-    const row = db.prepare(
+    const row = (await db.prepare(
       "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
-    ).get(userId, "litecoin") as { amount: number } | undefined;
+    ).get(userId, "litecoin")) as { amount: number } | undefined;
     if (row) {
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(amountLtc, now, userId, "litecoin");
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(userId, "litecoin", "LTC", "Litecoin", amountLtc, now);
     }

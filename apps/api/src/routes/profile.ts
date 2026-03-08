@@ -4,15 +4,15 @@ import { authMiddleware } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/", authMiddleware, (req: Request, res: Response) => {
+router.get("/", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string; email: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const row = db.prepare(
+  const row = (await db.prepare(
     "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency FROM profiles WHERE user_id = ?"
-  ).get(user.sub) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string } | undefined;
+  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string } | undefined;
   if (!row) {
     res.json({
       id: user.sub,
@@ -34,7 +34,7 @@ router.get("/", authMiddleware, (req: Request, res: Response) => {
   });
 });
 
-router.patch("/", authMiddleware, (req: Request, res: Response) => {
+router.patch("/", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -42,7 +42,7 @@ router.patch("/", authMiddleware, (req: Request, res: Response) => {
   }
   const { displayName, avatarUrl, theme, preferredCurrency } = req.body;
   const now = Date.now();
-  db.prepare(
+  await db.prepare(
     `UPDATE profiles SET 
       display_name = COALESCE(?, display_name),
       avatar_url = COALESCE(?, avatar_url),
@@ -58,9 +58,9 @@ router.patch("/", authMiddleware, (req: Request, res: Response) => {
     now,
     user.sub
   );
-  const row = db.prepare(
+  const row = (await db.prepare(
     "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency FROM profiles WHERE user_id = ?"
-  ).get(user.sub) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string };
+  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string };
   res.json({
     id: (req as Request & { user?: { sub: string } }).user!.sub,
     email: (req as Request & { user?: { email: string } }).user!.email,

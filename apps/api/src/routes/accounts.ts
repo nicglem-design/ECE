@@ -11,29 +11,29 @@ const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : nul
 
 const SUPPORTED_FIAT = ["USD", "EUR", "GBP", "SEK"];
 
-function ensureFiatBalance(userId: string, currency: string): void {
-  const row = db.prepare(
+async function ensureFiatBalance(userId: string, currency: string): Promise<void> {
+  const row = (await db.prepare(
     "SELECT amount FROM fiat_balances WHERE user_id = ? AND currency = ?"
-  ).get(userId, currency) as { amount: number } | undefined;
+  ).get(userId, currency)) as { amount: number } | undefined;
   if (!row) {
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO fiat_balances (user_id, currency, amount, updated_at) VALUES (?, ?, 0, ?)"
     ).run(userId, currency, now);
   }
 }
 
 /** GET /api/v1/accounts/fiat - Get fiat balances */
-router.get("/fiat", authMiddleware, (req: Request, res: Response) => {
+router.get("/fiat", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  for (const c of SUPPORTED_FIAT) ensureFiatBalance(user.sub, c);
-  const rows = db.prepare(
+  for (const c of SUPPORTED_FIAT) await ensureFiatBalance(user.sub, c);
+  const rows = (await db.prepare(
     "SELECT currency, amount FROM fiat_balances WHERE user_id = ?"
-  ).all(user.sub) as { currency: string; amount: number }[];
+  ).all(user.sub)) as { currency: string; amount: number }[];
   const balances = rows.map((r) => ({
     currency: r.currency,
     amount: r.amount,
@@ -90,7 +90,7 @@ router.post("/create-checkout", authMiddleware, async (req: Request, res: Respon
     });
     const paymentId = `pay_${session.id}`;
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO stripe_payments (id, user_id, currency, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(paymentId, user.sub, curr, numAmount, "pending", now);
     res.json({ url: session.url, sessionId: session.id });
@@ -112,11 +112,11 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
     return;
   }
   try {
-    const userRow = db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub) as { email: string } | undefined;
+    const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
     const email = userRow?.email || `user-${user.sub}@kanox.local`;
-    const profileRow = db.prepare(
+    const profileRow = (await db.prepare(
       "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
-    ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+    ).get(user.sub)) as { stripe_connect_account_id: string | null } | undefined;
 
     let accountId = profileRow?.stripe_connect_account_id;
     if (!accountId) {
@@ -127,11 +127,11 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
       });
       accountId = account.id;
       const now = Date.now();
-      const updated = db.prepare(
+      const updated = await db.prepare(
         "UPDATE profiles SET stripe_connect_account_id = ?, updated_at = ? WHERE user_id = ?"
       ).run(accountId, now, user.sub);
       if (updated.changes === 0) {
-        db.prepare(
+        await db.prepare(
           "INSERT INTO profiles (user_id, display_name, avatar_url, theme, preferred_currency, stripe_connect_account_id, updated_at) VALUES (?, '', '', 'dark', 'usd', ?, ?)"
         ).run(user.sub, accountId, now);
       }
@@ -151,21 +151,21 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
 });
 
 /** GET /api/v1/accounts/connect-status - Check if Stripe Connect is linked */
-router.get("/connect-status", authMiddleware, (req: Request, res: Response) => {
+router.get("/connect-status", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const row = db.prepare(
+  const row = (await db.prepare(
     "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
-  ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+  ).get(user.sub)) as { stripe_connect_account_id: string | null } | undefined;
   const linked = !!(row?.stripe_connect_account_id);
   res.json({ linked });
 });
 
 /** POST /api/v1/accounts/deposit - Simulated fiat deposit (when Stripe not configured) */
-router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
+router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -182,20 +182,20 @@ router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
     res.status(400).json({ message: "Amount must be between 0 and 100000" });
     return;
   }
-  ensureFiatBalance(user.sub, curr);
+  await ensureFiatBalance(user.sub, curr);
   const now = Date.now();
-  db.prepare(
+  await db.prepare(
     "UPDATE fiat_balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND currency = ?"
   ).run(numAmount, now, user.sub, curr);
   const txId = `fiat_dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
-  db.prepare(
+  await db.prepare(
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "deposit", numAmount, "completed", method || "card", now);
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 
 /** POST /api/v1/accounts/stripe-webhook - Stripe webhook for payment completion */
-router.post("/stripe-webhook", (req: Request, res: Response) => {
+router.post("/stripe-webhook", async (req: Request, res: Response) => {
   if (!stripe || !config.stripeWebhookSecret) {
     res.status(503).send("Stripe webhook not configured");
     return;
@@ -219,12 +219,12 @@ router.post("/stripe-webhook", (req: Request, res: Response) => {
     const currency = (session.metadata?.currency || "USD").toUpperCase();
     if (userId && amount > 0 && SUPPORTED_FIAT.includes(currency)) {
       const now = Date.now();
-      ensureFiatBalance(userId, currency);
-      db.prepare(
+      await ensureFiatBalance(userId, currency);
+      await db.prepare(
         "UPDATE fiat_balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND currency = ?"
       ).run(amount, now, userId, currency);
       const txId = `fiat_dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
-      db.prepare(
+      await db.prepare(
         "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, userId, currency, "deposit", amount, "completed", "stripe", now);
     }
@@ -240,7 +240,7 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     return;
   }
   const { currency, amount, linkedAccountId, totpCode } = req.body;
-  const twofaCheck = require2FAIfEnabled(user.sub, totpCode);
+  const twofaCheck = await require2FAIfEnabled(user.sub, totpCode);
   if (!twofaCheck.ok) {
     res.status(400).json({ message: twofaCheck.error, code: "2FA_REQUIRED" });
     return;
@@ -255,10 +255,10 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     res.status(400).json({ message: "Invalid amount" });
     return;
   }
-  ensureFiatBalance(user.sub, curr);
-  const balance = db.prepare(
+  await ensureFiatBalance(user.sub, curr);
+  const balance = (await db.prepare(
     "SELECT amount FROM fiat_balances WHERE user_id = ? AND currency = ?"
-  ).get(user.sub, curr) as { amount: number } | undefined;
+  ).get(user.sub, curr)) as { amount: number } | undefined;
   if (!balance || balance.amount < numAmount) {
     res.status(400).json({ message: "Insufficient balance" });
     return;
@@ -266,18 +266,18 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
   let destination = "External account";
   let stripeAccountId: string | null = null;
   if (linkedAccountId) {
-    const linked = db.prepare(
+    const linked = (await db.prepare(
       "SELECT label, last_four, stripe_account_id FROM linked_accounts WHERE id = ? AND user_id = ?"
-    ).get(linkedAccountId, user.sub) as { label: string; last_four: string; stripe_account_id: string | null } | undefined;
+    ).get(linkedAccountId, user.sub)) as { label: string; last_four: string; stripe_account_id: string | null } | undefined;
     if (linked) {
       destination = `${linked.label} ****${linked.last_four || ""}`;
       stripeAccountId = linked.stripe_account_id ?? null;
     }
   }
   if (!stripeAccountId) {
-    const profile = db.prepare(
+    const profile = (await db.prepare(
       "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
-    ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+    ).get(user.sub)) as { stripe_connect_account_id: string | null } | undefined;
     if (profile?.stripe_connect_account_id) {
       stripeAccountId = profile.stripe_connect_account_id;
       destination = "Connected bank account";
@@ -304,31 +304,31 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
   }
 
   const now = Date.now();
-  db.prepare(
+  await db.prepare(
     "UPDATE fiat_balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND currency = ?"
   ).run(numAmount, now, user.sub, curr);
   const txId = `fiat_wd_${Date.now()}_${uuidv4().slice(0, 8)}`;
-  db.prepare(
+  await db.prepare(
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, destination, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "withdraw", numAmount, status, destination, now);
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 
 /** GET /api/v1/accounts/linked - List linked bank accounts and cards */
-router.get("/linked", authMiddleware, (req: Request, res: Response) => {
+router.get("/linked", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const rows = db.prepare(
+  const rows = (await db.prepare(
     "SELECT id, type, label, last_four, currency, stripe_account_id as stripeAccountId FROM linked_accounts WHERE user_id = ? ORDER BY created_at DESC"
-  ).all(user.sub) as { id: string; type: string; label: string; last_four: string; currency: string; stripeAccountId: string | null }[];
+  ).all(user.sub)) as { id: string; type: string; label: string; last_four: string; currency: string; stripeAccountId: string | null }[];
   res.json({ accounts: rows });
 });
 
 /** POST /api/v1/accounts/linked - Add linked bank account or card */
-router.post("/linked", authMiddleware, (req: Request, res: Response) => {
+router.post("/linked", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -345,21 +345,21 @@ router.post("/linked", authMiddleware, (req: Request, res: Response) => {
   }
   const id = `la_${uuidv4()}`;
   const now = Date.now();
-  db.prepare(
+  await db.prepare(
     "INSERT INTO linked_accounts (id, user_id, type, label, last_four, stripe_account_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
   ).run(id, user.sub, type, String(label).trim(), lastFour ? String(lastFour).slice(-4) : null, stripeAccountId ? String(stripeAccountId) : null, now);
   res.json({ success: true, id });
 });
 
 /** DELETE /api/v1/accounts/linked/:id - Remove linked account */
-router.delete("/linked/:id", authMiddleware, (req: Request, res: Response) => {
+router.delete("/linked/:id", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
   const { id } = req.params;
-  const result = db.prepare(
+  const result = await db.prepare(
     "DELETE FROM linked_accounts WHERE id = ? AND user_id = ?"
   ).run(id, user.sub);
   if (result.changes === 0) {
@@ -370,15 +370,15 @@ router.delete("/linked/:id", authMiddleware, (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/accounts/transactions - Fiat transaction history */
-router.get("/transactions", authMiddleware, (req: Request, res: Response) => {
+router.get("/transactions", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const rows = db.prepare(
+  const rows = (await db.prepare(
     "SELECT id, currency, type, amount, status, method, destination, created_at as createdAt FROM fiat_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50"
-  ).all(user.sub) as { id: string; currency: string; type: string; amount: number; status: string; method: string; destination: string; createdAt: number }[];
+  ).all(user.sub)) as { id: string; currency: string; type: string; amount: number; status: string; method: string; destination: string; createdAt: number }[];
   res.json({ transactions: rows });
 });
 

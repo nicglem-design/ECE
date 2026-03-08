@@ -3,7 +3,11 @@
  * Fetches incoming transactions from Etherscan (or similar) and credits balances.
  */
 
-import { db } from "../db";
+import { db, isAsync } from "../db";
+
+const INSERT_DEPOSIT_SYNC = isAsync
+  ? "INSERT INTO deposit_sync (user_id, chain_id, block_number, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, chain_id) DO UPDATE SET block_number = EXCLUDED.block_number, updated_at = EXCLUDED.updated_at"
+  : "INSERT OR REPLACE INTO deposit_sync (user_id, chain_id, block_number, updated_at) VALUES (?, ?, ?, ?)";
 import { isEVMChain } from "./custody";
 
 const ETHERSCAN_API: Record<string, string> = {
@@ -44,19 +48,17 @@ async function fetchTxList(
 }
 
 /** Get the highest block we've processed for this user/chain. */
-function getLastProcessedBlock(userId: string, chainId: string): number {
-  const row = db.prepare(
+async function getLastProcessedBlock(userId: string, chainId: string): Promise<number> {
+  const row = (await db.prepare(
     "SELECT block_number FROM deposit_sync WHERE user_id = ? AND chain_id = ?"
-  ).get(userId, chainId) as { block_number: number } | undefined;
+  ).get(userId, chainId)) as { block_number: number } | undefined;
   return row?.block_number ?? 0;
 }
 
 /** Record processed block for next sync. */
-function setLastProcessedBlock(userId: string, chainId: string, blockNumber: number): void {
+async function setLastProcessedBlock(userId: string, chainId: string, blockNumber: number): Promise<void> {
   const now = Date.now();
-  db.prepare(
-    "INSERT OR REPLACE INTO deposit_sync (user_id, chain_id, block_number, updated_at) VALUES (?, ?, ?, ?)"
-  ).run(userId, chainId, blockNumber, now);
+  await db.prepare(INSERT_DEPOSIT_SYNC).run(userId, chainId, blockNumber, now);
 }
 
 /** Sync deposits for one user on one chain. */
@@ -66,7 +68,7 @@ export async function syncDepositsForUser(
   address: string
 ): Promise<number> {
   if (!isEVMChain(chainId)) return 0;
-  const startBlock = getLastProcessedBlock(userId, chainId);
+  const startBlock = await getLastProcessedBlock(userId, chainId);
   const txs = await fetchTxList(chainId, address, startBlock);
   const addressLower = address.toLowerCase();
   let count = 0;
@@ -80,7 +82,7 @@ export async function syncDepositsForUser(
     const valueWei = BigInt(tx.value || "0");
     if (valueWei <= 0n) continue;
 
-    const existing = db.prepare(
+    const existing = await db.prepare(
       "SELECT 1 FROM transactions WHERE tx_hash = ?"
     ).get(tx.hash);
     if (existing) continue;
@@ -88,15 +90,15 @@ export async function syncDepositsForUser(
     const amountEth = Number(valueWei) / 1e18;
     const txId = `dep_${tx.hash}_${userId}`;
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(txId, userId, chainId, "received", String(amountEth), tx.from, tx.to, tx.hash, now);
 
-    const row = db.prepare(
+    const row = (await db.prepare(
       "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
-    ).get(userId, chainId) as { amount: number } | undefined;
+    ).get(userId, chainId)) as { amount: number } | undefined;
     if (row) {
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(amountEth, now, userId, chainId);
     } else {
@@ -107,14 +109,14 @@ export async function syncDepositsForUser(
         "avalanche-2": { symbol: "AVAX", name: "Avalanche" },
       };
       const info = chainInfo[chainId] || { symbol: "ETH", name: "Native" };
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(userId, chainId, info.symbol, info.name, amountEth, now);
     }
-    setLastProcessedBlock(userId, chainId, parseInt(tx.blockNumber, 10));
+    await setLastProcessedBlock(userId, chainId, parseInt(tx.blockNumber, 10));
     maxBlock = Math.max(maxBlock, parseInt(tx.blockNumber, 10));
     count++;
   }
-  if (count > 0) setLastProcessedBlock(userId, chainId, maxBlock);
+  if (count > 0) await setLastProcessedBlock(userId, chainId, maxBlock);
   return count;
 }

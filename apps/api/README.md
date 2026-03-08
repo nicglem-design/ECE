@@ -79,4 +79,6 @@ When `STRIPE_SECRET_KEY` is set:
 
 ## Database
 
-SQLite at `./data/kanox.db` (or `DATABASE_PATH`). Schema is created on first run.
+**Supabase (recommended):** Set `DATABASE_URL` or `SUPABASE_DB_URL` to your Supabase PostgreSQL connection string. Get it from Supabase Dashboard → Settings → Database. Use the **connection pooler** URL (port 6543) for serverless.
+
+**SQLite fallback:** When no `DATABASE_URL`/`SUPABASE_DB_URL` is set, uses SQLite at `./data/kanox.db` (or `DATABASE_PATH`). Schema is created on first run.

@@ -3,7 +3,7 @@
  */
 
 import { createHash } from "crypto";
-import { db } from "../db";
+import { db, isAsync } from "../db";
 import { CHAINS } from "../chains";
 import { generateWallet, isCustodyEnabled, isEVMChain } from "./custody";
 import { generateBitcoinWallet, isBitcoinCustodyEnabled } from "./custody-bitcoin";
@@ -40,8 +40,13 @@ function deriveAddress(userId: string, chainId: string): string {
   return prefix + suffix;
 }
 
+const INSERT_ADDRESS =
+  isAsync
+    ? "INSERT INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, chain_id) DO NOTHING"
+    : "INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)";
+
 /** Get or create address for user on chain. Uses real custody when enabled. */
-export function getOrCreateAddress(userId: string, chainId: string): string {
+export async function getOrCreateAddress(userId: string, chainId: string): Promise<string> {
   const chain = CHAINS.find((c) => c.id === chainId);
   if (!chain) return deriveAddress(userId, chainId);
 
@@ -54,19 +59,17 @@ export function getOrCreateAddress(userId: string, chainId: string): string {
     (chainType === "dogecoin" && isDogecoinCustodyEnabled());
 
   if (useCustody && chainType) {
-    const keyRow = db.prepare(
+    const keyRow = (await db.prepare(
       "SELECT address FROM wallet_keys WHERE user_id = ? AND chain_type = ?"
-    ).get(userId, chainType) as { address: string } | undefined;
+    ).get(userId, chainType)) as { address: string } | undefined;
 
     if (keyRow) {
-      const addrRow = db.prepare(
+      const addrRow = (await db.prepare(
         "SELECT address FROM addresses WHERE user_id = ? AND chain_id = ?"
-      ).get(userId, chainId) as { address: string } | undefined;
+      ).get(userId, chainId)) as { address: string } | undefined;
       if (addrRow) return addrRow.address;
       const now = Date.now();
-      db.prepare(
-        "INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)"
-      ).run(userId, chainId, keyRow.address, now);
+      await db.prepare(INSERT_ADDRESS).run(userId, chainId, keyRow.address, now);
       return keyRow.address;
     }
 
@@ -96,55 +99,49 @@ export function getOrCreateAddress(userId: string, chainId: string): string {
     }
 
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO wallet_keys (user_id, chain_type, address, encrypted_private_key, created_at) VALUES (?, ?, ?, ?, ?)"
     ).run(userId, chainType, address, encryptedPrivateKey, now);
 
     if (chainType === "evm") {
       for (const c of CHAINS) {
         if (isEVMChain(c.id)) {
-          db.prepare(
-            "INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)"
-          ).run(userId, c.id, address, now);
+          await db.prepare(INSERT_ADDRESS).run(userId, c.id, address, now);
         }
       }
     } else {
-      db.prepare(
-        "INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)"
-      ).run(userId, chainId, address, now);
+      await db.prepare(INSERT_ADDRESS).run(userId, chainId, address, now);
     }
     return address;
   }
 
-  const row = db.prepare(
+  const row = (await db.prepare(
     "SELECT address FROM addresses WHERE user_id = ? AND chain_id = ?"
-  ).get(userId, chainId) as { address: string } | undefined;
+  ).get(userId, chainId)) as { address: string } | undefined;
 
   if (row) return row.address;
 
   const address = deriveAddress(userId, chainId);
   const now = Date.now();
-  db.prepare(
-    "INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)"
-  ).run(userId, chainId, address, now);
+  await db.prepare(INSERT_ADDRESS).run(userId, chainId, address, now);
   return address;
 }
 
 /** Get address only (does not create). */
-export function getAddress(userId: string, chainId: string): string | null {
-  const row = db.prepare(
+export async function getAddress(userId: string, chainId: string): Promise<string | null> {
+  const row = (await db.prepare(
     "SELECT address FROM addresses WHERE user_id = ? AND chain_id = ?"
-  ).get(userId, chainId) as { address: string } | undefined;
+  ).get(userId, chainId)) as { address: string } | undefined;
   return row?.address ?? null;
 }
 
 /** Get encrypted private key for a chain type (null if not custody). */
-export function getEncryptedPrivateKey(
+export async function getEncryptedPrivateKey(
   userId: string,
   chainType: "evm" | "bitcoin" | "solana" | "litecoin" | "dogecoin" = "evm"
-): string | null {
-  const row = db.prepare(
+): Promise<string | null> {
+  const row = (await db.prepare(
     "SELECT encrypted_private_key FROM wallet_keys WHERE user_id = ? AND chain_type = ?"
-  ).get(userId, chainType) as { encrypted_private_key: string } | undefined;
+  ).get(userId, chainType)) as { encrypted_private_key: string } | undefined;
   return row?.encrypted_private_key ?? null;
 }

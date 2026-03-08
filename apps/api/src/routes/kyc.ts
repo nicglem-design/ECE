@@ -6,7 +6,7 @@ import { config } from "../config";
 const router = Router();
 
 /** Sumsub webhook: applicantReviewed. Updates KYC status when verification completes. */
-router.post("/webhook", (req: Request, res: Response) => {
+router.post("/webhook", async (req: Request, res: Response) => {
   res.status(200).send("OK"); // Ack immediately
   const body = req.body as {
     applicantId?: string;
@@ -23,7 +23,7 @@ router.post("/webhook", (req: Request, res: Response) => {
   if (!status) return;
   try {
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "UPDATE kyc_status SET status = ?, updated_at = ? WHERE user_id = ?"
     ).run(status, now, userId);
   } catch (err) {
@@ -31,13 +31,13 @@ router.post("/webhook", (req: Request, res: Response) => {
   }
 });
 
-router.get("/status", authMiddleware, (req: Request, res: Response) => {
+router.get("/status", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const row = db.prepare("SELECT status FROM kyc_status WHERE user_id = ?").get(user.sub) as { status: string } | undefined;
+  const row = (await db.prepare("SELECT status FROM kyc_status WHERE user_id = ?").get(user.sub)) as { status: string } | undefined;
   res.json({ kycStatus: row?.status || "pending" });
 });
 

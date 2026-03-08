@@ -1,5 +1,5 @@
 /**
- * Order book matching engine with SQLite persistence.
+ * Order book matching engine with Supabase/SQLite persistence.
  */
 
 import {
@@ -32,20 +32,20 @@ export const COIN_TO_PAIR: Record<string, string> = Object.fromEntries(
   Object.entries(PAIR_TO_COIN).map(([pair, coin]) => [coin, pair])
 );
 
-function addToBook(
+async function addToBook(
   pair: string,
   side: "buy" | "sell",
   price: number,
   amount: number
-): void {
-  updateBookLevel(pair, side, price, amount);
+): Promise<void> {
+  await updateBookLevel(pair, side, price, amount);
 }
 
 /** Match incoming order against the book. Returns executed trades and updated order. */
-function matchOrder(order: Order): Trade[] {
+async function matchOrder(order: Order): Promise<Trade[]> {
   const { pair, side, price, amount } = order;
-  const bids = getBookLevels(pair, "buy");
-  const asks = getBookLevels(pair, "sell");
+  const bids = await getBookLevels(pair, "buy");
+  const asks = await getBookLevels(pair, "sell");
   const counterBook = side === "buy" ? asks : bids;
   const counterSide = side === "buy" ? "sell" : "buy";
   const executed: Trade[] = [];
@@ -80,25 +80,25 @@ function matchOrder(order: Order): Trade[] {
     remaining -= fillAmount;
     order.filled += fillAmount;
 
-    addToBook(pair, counterSide, bookPrice, -fillAmount);
-    insertTrade(trade);
+    await addToBook(pair, counterSide, bookPrice, -fillAmount);
+    await insertTrade(trade);
   }
 
   order.status =
     order.filled >= order.amount ? "filled" : order.filled > 0 ? "partially_filled" : "open";
-  updateOrder(order.id, order.filled, order.status);
+  await updateOrder(order.id, order.filled, order.status);
 
   return executed;
 }
 
 /** Place a limit order. Returns order and any executed trades. */
-export function placeOrder(
+export async function placeOrder(
   userId: string,
   pair: string,
   side: "buy" | "sell",
   price: number,
   amount: number
-): { order: Order; trades: Trade[] } {
+): Promise<{ order: Order; trades: Trade[] }> {
   const order: Order = {
     id: nextOrderId(),
     userId,
@@ -111,44 +111,46 @@ export function placeOrder(
     status: "open",
   };
 
-  insertOrder(order);
+  await insertOrder(order);
   const ourSide = side;
-  addToBook(pair, ourSide, price, amount);
+  await addToBook(pair, ourSide, price, amount);
 
-  const trades = matchOrder(order);
+  const trades = await matchOrder(order);
 
   if (order.filled > 0) {
-    addToBook(pair, ourSide, price, -order.filled);
+    await addToBook(pair, ourSide, price, -order.filled);
   }
 
   return { order, trades };
 }
 
 /** Cancel an open order. Returns true if cancelled. */
-export function cancelOrder(orderId: string, userId: string): boolean {
-  const order = getOrderById(orderId);
+export async function cancelOrder(orderId: string, userId: string): Promise<boolean> {
+  const order = await getOrderById(orderId);
   if (!order || order.userId !== userId) return false;
   if (order.status !== "open") return false;
 
   const remaining = order.amount - order.filled;
   if (remaining > 0) {
-    addToBook(order.pair, order.side, order.price, -remaining);
+    await addToBook(order.pair, order.side, order.price, -remaining);
   }
-  updateOrder(order.id, order.filled, "cancelled");
+  await updateOrder(order.id, order.filled, "cancelled");
   return true;
 }
 
 export { getOrdersByUser, getOrderById, getTrades };
 
-export function getOrderBookSnapshot(pair: string): {
+export async function getOrderBookSnapshot(pair: string): Promise<{
   bids: { price: number; amount: number }[];
   asks: { price: number; amount: number }[];
   lastTradePrice: number | null;
   lastTradeTime: number | null;
-} {
-  const bids = getBookLevels(pair, "buy");
-  const asks = getBookLevels(pair, "sell");
-  const pairTrades = getTrades(pair, 1);
+}> {
+  const [bids, asks, pairTrades] = await Promise.all([
+    getBookLevels(pair, "buy"),
+    getBookLevels(pair, "sell"),
+    getTrades(pair, 1),
+  ]);
   const lastTrade = pairTrades[0] ?? null;
 
   const bidLevels = Array.from(bids.entries())
@@ -171,14 +173,16 @@ export function getOrderBookSnapshot(pair: string): {
   };
 }
 
-export function getLastTradePrice(pair: string): number | null {
-  const trades = getTrades(pair, 1);
+export async function getLastTradePrice(pair: string): Promise<number | null> {
+  const trades = await getTrades(pair, 1);
   return trades[0]?.price ?? null;
 }
 
-export function getMidPrice(pair: string): number | null {
-  const bids = getBookLevels(pair, "buy");
-  const asks = getBookLevels(pair, "sell");
+export async function getMidPrice(pair: string): Promise<number | null> {
+  const [bids, asks] = await Promise.all([
+    getBookLevels(pair, "buy"),
+    getBookLevels(pair, "sell"),
+  ]);
   const bidPrices = Array.from(bids.keys()).filter((p) => (bids.get(p) ?? 0) > 0);
   const askPrices = Array.from(asks.keys()).filter((p) => (asks.get(p) ?? 0) > 0);
   const bestBid = bidPrices.length > 0 ? Math.max(...bidPrices) : 0;
@@ -196,12 +200,12 @@ const FIAT_TO_USD: Record<string, number> = {
   dkk: 0.14,
 };
 
-export function getChartFromTrades(
+export async function getChartFromTrades(
   pair: string,
   days: number,
   currency: string
-): [number, number][] | null {
-  const trades = getTrades(pair, 1000);
+): Promise<[number, number][] | null> {
+  const trades = await getTrades(pair, 1000);
   const cutoff = Date.now() - days * 86400 * 1000;
   const recent = trades.filter((t) => t.timestamp >= cutoff);
   if (recent.length < 2) return null;

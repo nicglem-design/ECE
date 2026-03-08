@@ -26,7 +26,7 @@ async function getUserId(req: Request): Promise<string | null> {
 }
 
 /** GET /orders - List user's orders */
-router.get("/orders", authMiddleware, (req: Request, res: Response) => {
+router.get("/orders", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ error: "Authentication required" });
@@ -35,7 +35,7 @@ router.get("/orders", authMiddleware, (req: Request, res: Response) => {
   const pair = req.query.pair as string | undefined;
   const status = req.query.status as string | undefined;
   const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 100);
-  const orders = getOrdersByUser(user.sub, { pair, status, limit });
+  const orders = await getOrdersByUser(user.sub, { pair, status, limit });
   res.json({ orders });
 });
 
@@ -48,7 +48,7 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
     return next();
   }
   authMiddleware(req, res, next);
-}, (req: Request, res: Response) => {
+}, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ error: "Authentication required" });
@@ -72,7 +72,7 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
     return;
   }
   try {
-    const { order, trades } = placeOrder(effectiveUserId, normalizedPair, side, numPrice, numAmount);
+    const { order, trades } = await placeOrder(effectiveUserId, normalizedPair, side, numPrice, numAmount);
     res.json({ order, trades });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Place order failed" });
@@ -80,13 +80,13 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
 });
 
 /** DELETE /orders/:orderId - Cancel order */
-router.delete("/orders/:orderId", authMiddleware, (req: Request, res: Response) => {
+router.delete("/orders/:orderId", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
-  const ok = cancelOrder(req.params.orderId, user.sub);
+  const ok = await cancelOrder(req.params.orderId, user.sub);
   if (!ok) {
     res.status(404).json({ error: "Order not found or not cancellable" });
     return;
@@ -95,26 +95,26 @@ router.delete("/orders/:orderId", authMiddleware, (req: Request, res: Response) 
 });
 
 /** GET /orderbook/:pair - Get order book snapshot */
-router.get("/orderbook/:pair", (req: Request, res: Response) => {
+router.get("/orderbook/:pair", async (req: Request, res: Response) => {
   const pair = String(req.params.pair || "").toUpperCase().replace(/-/g, "");
   if (!pair) {
     res.status(400).json({ error: "pair required" });
     return;
   }
-  const snapshot = getOrderBookSnapshot(pair);
+  const snapshot = await getOrderBookSnapshot(pair);
   res.json(snapshot);
 });
 
 /** GET /trades/:pair - Get recent trades */
-router.get("/trades/:pair", (req: Request, res: Response) => {
+router.get("/trades/:pair", async (req: Request, res: Response) => {
   const pair = String(req.params.pair || "").toUpperCase().replace(/-/g, "");
   const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 100);
-  const trades = getTrades(pair, limit);
+  const trades = await getTrades(pair, limit);
   res.json({ trades });
 });
 
 /** GET /prices - Get our prices from order book */
-router.get("/prices", (req: Request, res: Response) => {
+router.get("/prices", async (req: Request, res: Response) => {
   const currency = (req.query.currency as string) || "usd";
   const FIAT_TO_USD: Record<string, number> = {
     usd: 1,
@@ -129,8 +129,7 @@ router.get("/prices", (req: Request, res: Response) => {
   const priceChange24h: Record<string, number> = {};
 
   for (const [pair, coinId] of Object.entries(PAIR_TO_COIN)) {
-    const lastTrade = getLastTradePrice(pair);
-    const midPrice = getMidPrice(pair);
+    const [lastTrade, midPrice] = await Promise.all([getLastTradePrice(pair), getMidPrice(pair)]);
     const price = lastTrade ?? midPrice;
     if (price != null && price > 0) {
       prices[coinId] = price / rate;
@@ -149,7 +148,7 @@ router.get("/prices", (req: Request, res: Response) => {
 });
 
 /** GET /chart - Get chart data from our trades */
-router.get("/chart", (req: Request, res: Response) => {
+router.get("/chart", async (req: Request, res: Response) => {
   const coinId = req.query.coinId as string;
   const currency = (req.query.currency as string) || "usd";
   const days = Math.min(Math.max(1, parseInt(String(req.query.days || "7"), 10)), 365);
@@ -165,7 +164,7 @@ router.get("/chart", (req: Request, res: Response) => {
     return;
   }
 
-  const prices = getChartFromTrades(pair, days, currency);
+  const prices = await getChartFromTrades(pair, days, currency);
   if (prices && prices.length >= 2) {
     res.json({ prices, candles: null, source: "orderbook" });
   } else {

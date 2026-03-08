@@ -39,25 +39,25 @@ export async function syncDogecoinDepositsForUser(userId: string, address: strin
       if (out.addresses?.includes(address)) totalReceived += out.value;
     }
     if (totalReceived <= 0) continue;
-    const existing = db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(tx.hash);
+    const existing = await db.prepare("SELECT 1 FROM transactions WHERE tx_hash = ?").get(tx.hash);
     if (existing) continue;
 
     const amountDoge = totalReceived / SATOSHI_PER_DOGE;
     const txId = `dep_${tx.hash}_${userId}`;
     const now = Date.now();
-    db.prepare(
+    await db.prepare(
       "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).run(txId, userId, "dogecoin", "received", String(amountDoge), "unknown", address, tx.hash, now);
 
-    const row = db.prepare(
+    const row = (await db.prepare(
       "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
-    ).get(userId, "dogecoin") as { amount: number } | undefined;
+    ).get(userId, "dogecoin")) as { amount: number } | undefined;
     if (row) {
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(amountDoge, now, userId, "dogecoin");
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(userId, "dogecoin", "DOGE", "Dogecoin", amountDoge, now);
     }

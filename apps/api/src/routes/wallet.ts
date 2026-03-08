@@ -66,26 +66,23 @@ router.get("/chains", (_req: Request, res: Response) => {
   res.json({ chains: CHAINS });
 });
 
-router.get("/addresses", authMiddleware, (req: Request, res: Response) => {
+router.get("/addresses", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const addresses = CHAINS.map((c) => {
-    const address = getOrCreateAddress(user.sub, c.id);
-    return {
-      chainId: c.id,
-      address,
-      name: c.name,
-      symbol: c.symbol,
-    };
-  });
+  const addresses = await Promise.all(
+    CHAINS.map(async (c) => {
+      const address = await getOrCreateAddress(user.sub, c.id);
+      return { chainId: c.id, address, name: c.name, symbol: c.symbol };
+    })
+  );
   res.json({ addresses });
 });
 
-function ensureBalances(userId: string): void {
-  const existing = db.prepare("SELECT chain_id FROM balances WHERE user_id = ?").all(userId) as { chain_id: string }[];
+async function ensureBalances(userId: string): Promise<void> {
+  const existing = (await db.prepare("SELECT chain_id FROM balances WHERE user_id = ?").all(userId)) as { chain_id: string }[];
   if (existing.length > 0) return;
   const now = Date.now();
   const insert = db.prepare(
@@ -93,9 +90,9 @@ function ensureBalances(userId: string): void {
   );
   for (const c of CHAINS) {
     const initialAmount = ["ethereum", "bitcoin", "solana"].includes(c.id) ? 0.01 : 0;
-    insert.run(userId, c.id, c.symbol, c.name, initialAmount, now);
+    await insert.run(userId, c.id, c.symbol, c.name, initialAmount, now);
   }
-  insert.run(userId, "tether", "USDT", "Tether", 1000, now);
+  await insert.run(userId, "tether", "USDT", "Tether", 1000, now);
 }
 
 router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
@@ -104,31 +101,31 @@ router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  ensureBalances(user.sub);
-  const rows = db.prepare(
+  await ensureBalances(user.sub);
+  const rows = (await db.prepare(
     "SELECT chain_id as chainId, symbol, name, amount FROM balances WHERE user_id = ?"
-  ).all(user.sub) as { chainId: string; symbol: string; name: string; amount: number }[];
+  ).all(user.sub)) as { chainId: string; symbol: string; name: string; amount: number }[];
 
   if (isCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "ethereum");
+    const addr = await getOrCreateAddress(user.sub, "ethereum");
     for (const c of ["ethereum", "binancecoin", "matic-network", "avalanche-2"]) {
       syncDepositsForUser(user.sub, c, addr).catch(() => {});
     }
   }
   if (isBitcoinCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "bitcoin");
+    const addr = await getOrCreateAddress(user.sub, "bitcoin");
     syncBitcoinDepositsForUser(user.sub, addr).catch(() => {});
   }
   if (isSolanaCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "solana");
+    const addr = await getOrCreateAddress(user.sub, "solana");
     syncSolanaDepositsForUser(user.sub, addr).catch(() => {});
   }
   if (isLitecoinCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "litecoin");
+    const addr = await getOrCreateAddress(user.sub, "litecoin");
     syncLitecoinDepositsForUser(user.sub, addr).catch(() => {});
   }
   if (isDogecoinCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "dogecoin");
+    const addr = await getOrCreateAddress(user.sub, "dogecoin");
     syncDogecoinDepositsForUser(user.sub, addr).catch(() => {});
   }
 
@@ -191,7 +188,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
   const { chainId, toAddress, amount, tokenId, evmChainId, totpCode } = req.body;
-  const twofaCheck = require2FAIfEnabled(user.sub, totpCode);
+  const twofaCheck = await require2FAIfEnabled(user.sub, totpCode);
   if (!twofaCheck.ok) {
     res.status(400).json({ message: twofaCheck.error, code: "2FA_REQUIRED" });
     return;
@@ -217,10 +214,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     res.status(400).json({ message: "Unsupported chain" });
     return;
   }
-  const myAddress = getOrCreateAddress(user.sub, effectiveEvmChain);
+  const myAddress = await getOrCreateAddress(user.sub, effectiveEvmChain);
 
   if (effectiveTokenId && ERC20_CONTRACTS[effectiveEvmChain]?.[effectiveTokenId] && isCustodyEnabled()) {
-    const encKey = getEncryptedPrivateKey(user.sub, "evm");
+    const encKey = await getEncryptedPrivateKey(user.sub, "evm");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
@@ -235,10 +232,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendERC20(effectiveEvmChain, encKey, tokenContract, toAddress.trim(), String(numAmount));
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -256,7 +253,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   const useDogeCustody = chainId === "dogecoin" && isDogecoinCustodyEnabled();
 
   if (useEvmCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub, "evm");
+    const encKey = await getEncryptedPrivateKey(user.sub, "evm");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
@@ -271,10 +268,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendNative(chainId, encKey, toAddress.trim(), amountWei);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -286,7 +283,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   }
 
   if (useBtcCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub, "bitcoin");
+    const encKey = await getEncryptedPrivateKey(user.sub, "bitcoin");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
@@ -300,10 +297,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendBitcoin(encKey, toAddress.trim(), numAmount);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -315,7 +312,7 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   }
 
   if (useSolCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub, "solana");
+    const encKey = await getEncryptedPrivateKey(user.sub, "solana");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
@@ -329,10 +326,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendSolana(encKey, toAddress.trim(), numAmount);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -344,12 +341,12 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   }
 
   if (useLtcCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub, "litecoin");
+    const encKey = await getEncryptedPrivateKey(user.sub, "litecoin");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
     }
-    const ltcAddr = getOrCreateAddress(user.sub, "litecoin");
+    const ltcAddr = await getOrCreateAddress(user.sub, "litecoin");
     try {
       const chainBal = await getLitecoinBalance(ltcAddr);
       if (parseFloat(chainBal) < numAmount) {
@@ -359,10 +356,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendLitecoin(encKey, toAddress.trim(), numAmount);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), ltcAddr, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -374,12 +371,12 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   }
 
   if (useDogeCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub, "dogecoin");
+    const encKey = await getEncryptedPrivateKey(user.sub, "dogecoin");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
     }
-    const dogeAddr = getOrCreateAddress(user.sub, "dogecoin");
+    const dogeAddr = await getOrCreateAddress(user.sub, "dogecoin");
     try {
       const chainBal = await getDogecoinBalance(dogeAddr);
       if (parseFloat(chainBal) < numAmount) {
@@ -389,10 +386,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       const txHash = await sendDogecoin(encKey, toAddress.trim(), numAmount);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(numAmount, now, user.sub, chainId);
-      db.prepare(
+      await db.prepare(
         "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).run(txId, user.sub, chainId, "sent", String(numAmount), dogeAddr, toAddress.trim(), txHash, now);
       res.json({ success: true, txHash });
@@ -403,10 +400,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
 
-  ensureBalances(user.sub);
-  const balance = db.prepare(
+  await ensureBalances(user.sub);
+  const balance = (await db.prepare(
     "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
-  ).get(user.sub, chainId) as { amount: number } | undefined;
+  ).get(user.sub, chainId)) as { amount: number } | undefined;
   if (!balance || balance.amount < numAmount) {
     res.status(400).json({ message: "Insufficient balance" });
     return;
@@ -414,10 +411,10 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
   const txHash = `0x${Buffer.from(txId).toString("hex").slice(0, 64)}`;
   const now = Date.now();
-  db.prepare(
+  await db.prepare(
     "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
   ).run(numAmount, now, user.sub, chainId);
-  db.prepare(
+  await db.prepare(
     "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
   res.json({ success: true, txHash });
@@ -431,9 +428,9 @@ router.post("/sync-deposits", authMiddleware, async (req: Request, res: Response
     return;
   }
   let total = 0;
-  const rows = db.prepare(
+  const rows = (await db.prepare(
     "SELECT chain_id as chainId, address FROM addresses WHERE user_id = ?"
-  ).all(user.sub) as { chainId: string; address: string }[];
+  ).all(user.sub)) as { chainId: string; address: string }[];
   for (const r of rows) {
     if (isEVMChain(r.chainId)) {
       total += await syncDepositsForUser(user.sub, r.chainId, r.address);
@@ -466,7 +463,7 @@ router.get("/transactions/:chainId/status/:txHash", authMiddleware, async (req: 
     res.status(400).json({ message: "chainId and txHash required" });
     return;
   }
-  const row = db.prepare(
+  const row = await db.prepare(
     "SELECT 1 FROM transactions WHERE user_id = ? AND chain_id = ? AND tx_hash = ?"
   ).get(user.sub, chainId, txHash);
   if (!row) {
@@ -482,16 +479,16 @@ router.get("/transactions/:chainId/status/:txHash", authMiddleware, async (req: 
   }
 });
 
-router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Response) => {
+router.get("/transactions/:chainId", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
   const { chainId } = req.params;
-  const rows = db.prepare(
+  const rows = (await db.prepare(
     "SELECT type, amount, from_address as fromAddress, to_address as toAddress, tx_hash as txHash, created_at as createdAt FROM transactions WHERE user_id = ? AND chain_id = ? ORDER BY created_at DESC LIMIT 50"
-  ).all(user.sub, chainId) as { type: string; amount: string; fromAddress: string; toAddress: string; txHash: string; createdAt: number }[];
+  ).all(user.sub, chainId)) as { type: string; amount: string; fromAddress: string; toAddress: string; txHash: string; createdAt: number }[];
   const transactions = rows.map((r) => ({
     type: r.type as "sent" | "received",
     amount: r.amount,
@@ -521,7 +518,7 @@ router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Respons
   res.json({ transactions, explorerTx });
 });
 
-router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
+router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -537,25 +534,26 @@ router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
     res.status(400).json({ message: "Amount must be between 0 and 10000" });
     return;
   }
-  ensureBalances(user.sub);
+  await ensureBalances(user.sub);
   const chain = CHAINS.find((c) => c.id === chainId) || SWAP_COINS.find((c) => c.id === chainId);
   if (!chain) {
     res.status(400).json({ message: "Unsupported chain" });
     return;
   }
   const now = Date.now();
-  const row = db.prepare("SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?").get(user.sub, chainId) as { amount: number } | undefined;
+  const row = (await db.prepare("SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?").get(user.sub, chainId)) as { amount: number } | undefined;
   if (row) {
-    db.prepare("UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?").run(numAmount, now, user.sub, chainId);
+    await db.prepare("UPDATE balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND chain_id = ?").run(numAmount, now, user.sub, chainId);
   } else {
-    db.prepare(
+    await db.prepare(
       "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(user.sub, chainId, chain.symbol, chain.name, numAmount, now);
   }
   const txId = `dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
-  db.prepare(
+  const addr = await getOrCreateAddress(user.sub, chainId);
+  await db.prepare(
     "INSERT INTO transactions (id, user_id, chain_id, type, amount, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(txId, user.sub, chainId, "received", String(numAmount), getOrCreateAddress(user.sub, chainId), `0x${txId}`, now);
+  ).run(txId, user.sub, chainId, "received", String(numAmount), addr, `0x${txId}`, now);
   res.json({ success: true, amount: numAmount });
 });
 
@@ -576,24 +574,24 @@ router.post("/swap-execution", authMiddleware, async (req: Request, res: Respons
     res.status(400).json({ message: "Invalid amounts" });
     return;
   }
-  ensureBalances(user.sub);
+  await ensureBalances(user.sub);
   if (isCustodyEnabled()) {
-    const addr = getOrCreateAddress(user.sub, "ethereum");
+    const addr = await getOrCreateAddress(user.sub, "ethereum");
     for (const c of ["ethereum", "binancecoin", "matic-network", "avalanche-2"]) {
       syncDepositsForUser(user.sub, c, addr).catch(() => {});
     }
   }
   if (isBitcoinCustodyEnabled()) {
-    syncBitcoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "bitcoin")).catch(() => {});
+    syncBitcoinDepositsForUser(user.sub, await getOrCreateAddress(user.sub, "bitcoin")).catch(() => {});
   }
   if (isSolanaCustodyEnabled()) {
-    syncSolanaDepositsForUser(user.sub, getOrCreateAddress(user.sub, "solana")).catch(() => {});
+    syncSolanaDepositsForUser(user.sub, await getOrCreateAddress(user.sub, "solana")).catch(() => {});
   }
   if (isLitecoinCustodyEnabled()) {
-    syncLitecoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "litecoin")).catch(() => {});
+    syncLitecoinDepositsForUser(user.sub, await getOrCreateAddress(user.sub, "litecoin")).catch(() => {});
   }
   if (isDogecoinCustodyEnabled()) {
-    syncDogecoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "dogecoin")).catch(() => {});
+    syncDogecoinDepositsForUser(user.sub, await getOrCreateAddress(user.sub, "dogecoin")).catch(() => {});
   }
   const fromChain = CHAINS.find((c) => c.id === fromCoinId) || SWAP_COINS.find((c) => c.id === fromCoinId) || { id: fromCoinId, symbol: fromCoinId.toUpperCase().slice(0, 4), name: fromCoinId };
   const toChain = CHAINS.find((c) => c.id === toCoinId) || SWAP_COINS.find((c) => c.id === toCoinId) || { id: toCoinId, symbol: toCoinId.toUpperCase().slice(0, 4), name: toCoinId };
@@ -609,28 +607,28 @@ router.post("/swap-execution", authMiddleware, async (req: Request, res: Respons
   const fiatCurrency = fromFiat ? fromCoinId.toUpperCase() : null;
 
   if (fromFiat) {
-    const fiatRow = db.prepare(
+    const fiatRow = (await db.prepare(
       "SELECT amount FROM fiat_balances WHERE user_id = ? AND currency = ?"
-    ).get(user.sub, fiatCurrency) as { amount: number } | undefined;
+    ).get(user.sub, fiatCurrency)) as { amount: number } | undefined;
     if (!fiatRow || fiatRow.amount < fromAmt) {
       res.status(400).json({ message: "Insufficient fiat balance" });
       return;
     }
-    db.prepare(
+    await db.prepare(
       "UPDATE fiat_balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND currency = ?"
     ).run(fromAmt, now, user.sub, fiatCurrency);
   } else {
-    const fromBal = getBalance.get(user.sub, fromChain.id) as { amount: number } | undefined;
+    const fromBal = (await getBalance.get(user.sub, fromChain.id)) as { amount: number } | undefined;
     if (fromBal && fromBal.amount < fromAmt) {
       res.status(400).json({ message: "Insufficient balance" });
       return;
     }
     if (fromBal) {
-      db.prepare(
+      await db.prepare(
         "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
       ).run(fromAmt, now, user.sub, fromChain.id);
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(user.sub, fromChain.id, fromChain.symbol, fromChain.name, -fromAmt, now);
     }
@@ -639,24 +637,24 @@ router.post("/swap-execution", authMiddleware, async (req: Request, res: Respons
   const toFiatCurrency = toFiat ? toCoinId.toUpperCase() : null;
 
   if (toFiat) {
-    const fiatRow = db.prepare(
+    const fiatRow = (await db.prepare(
       "SELECT amount FROM fiat_balances WHERE user_id = ? AND currency = ?"
-    ).get(user.sub, toFiatCurrency) as { amount: number } | undefined;
+    ).get(user.sub, toFiatCurrency)) as { amount: number } | undefined;
     if (fiatRow) {
-      db.prepare(
+      await db.prepare(
         "UPDATE fiat_balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND currency = ?"
       ).run(toAmt, now, user.sub, toFiatCurrency);
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO fiat_balances (user_id, currency, amount, updated_at) VALUES (?, ?, ?, ?)"
       ).run(user.sub, toFiatCurrency, toAmt, now);
     }
   } else {
-    const toBal = getBalance.get(user.sub, toChain.id) as { amount: number } | undefined;
+    const toBal = (await getBalance.get(user.sub, toChain.id)) as { amount: number } | undefined;
     if (toBal) {
-      updateBalance.run(toAmt, now, user.sub, toChain.id);
+      await updateBalance.run(toAmt, now, user.sub, toChain.id);
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO balances (user_id, chain_id, symbol, name, amount, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
       ).run(user.sub, toChain.id, toChain.symbol, toChain.name, toAmt, now);
     }
