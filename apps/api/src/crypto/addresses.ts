@@ -8,6 +8,8 @@ import { CHAINS } from "../chains";
 import { generateWallet, isCustodyEnabled, isEVMChain } from "./custody";
 import { generateBitcoinWallet, isBitcoinCustodyEnabled } from "./custody-bitcoin";
 import { generateSolanaWallet, isSolanaCustodyEnabled } from "./custody-solana";
+import { generateLitecoinWallet, isLitecoinCustodyEnabled } from "./custody-litecoin";
+import { generateDogecoinWallet, isDogecoinCustodyEnabled } from "./custody-dogecoin";
 
 const CHAIN_PREFIXES: Record<string, string> = {
   ethereum: "0x",
@@ -25,6 +27,8 @@ function chainIdToChainType(chainId: string): string | null {
   if (isEVMChain(chainId)) return "evm";
   if (chainId === "bitcoin") return "bitcoin";
   if (chainId === "solana") return "solana";
+  if (chainId === "litecoin") return "litecoin";
+  if (chainId === "dogecoin") return "dogecoin";
   return null;
 }
 
@@ -45,7 +49,9 @@ export function getOrCreateAddress(userId: string, chainId: string): string {
   const useCustody =
     (chainType === "evm" && isCustodyEnabled()) ||
     (chainType === "bitcoin" && isBitcoinCustodyEnabled()) ||
-    (chainType === "solana" && isSolanaCustodyEnabled());
+    (chainType === "solana" && isSolanaCustodyEnabled()) ||
+    (chainType === "litecoin" && isLitecoinCustodyEnabled()) ||
+    (chainType === "dogecoin" && isDogecoinCustodyEnabled());
 
   if (useCustody && chainType) {
     const keyRow = db.prepare(
@@ -73,6 +79,14 @@ export function getOrCreateAddress(userId: string, chainId: string): string {
       encryptedPrivateKey = w.encryptedPrivateKey;
     } else if (chainType === "bitcoin") {
       const w = generateBitcoinWallet();
+      address = w.address;
+      encryptedPrivateKey = w.encryptedPrivateKey;
+    } else if (chainType === "litecoin") {
+      const w = generateLitecoinWallet();
+      address = w.address;
+      encryptedPrivateKey = w.encryptedPrivateKey;
+    } else if (chainType === "dogecoin") {
+      const w = generateDogecoinWallet();
       address = w.address;
       encryptedPrivateKey = w.encryptedPrivateKey;
     } else {
@@ -125,7 +139,10 @@ export function getAddress(userId: string, chainId: string): string | null {
 }
 
 /** Get encrypted private key for a chain type (null if not custody). */
-export function getEncryptedPrivateKey(userId: string, chainType: "evm" | "bitcoin" | "solana" = "evm"): string | null {
+export function getEncryptedPrivateKey(
+  userId: string,
+  chainType: "evm" | "bitcoin" | "solana" | "litecoin" | "dogecoin" = "evm"
+): string | null {
   const row = db.prepare(
     "SELECT encrypted_private_key FROM wallet_keys WHERE user_id = ? AND chain_type = ?"
   ).get(userId, chainType) as { encrypted_private_key: string } | undefined;

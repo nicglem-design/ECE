@@ -24,10 +24,24 @@ import {
   getSolanaBalance,
   sendSolana,
 } from "../crypto/custody-solana";
+import {
+  isLitecoinCustodyEnabled,
+  getLitecoinBalance,
+  sendLitecoin,
+} from "../crypto/custody-litecoin";
+import {
+  isDogecoinCustodyEnabled,
+  getDogecoinBalance,
+  sendDogecoin,
+} from "../crypto/custody-dogecoin";
 import { syncDepositsForUser } from "../crypto/depositSync";
 import { validateAddress } from "../crypto/addressValidation";
 import { syncBitcoinDepositsForUser } from "../crypto/depositSync-bitcoin";
 import { syncSolanaDepositsForUser } from "../crypto/depositSync-solana";
+import { syncLitecoinDepositsForUser } from "../crypto/depositSync-litecoin";
+import { syncDogecoinDepositsForUser } from "../crypto/depositSync-dogecoin";
+import { getTxStatus } from "../crypto/txStatus";
+import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { parseEther } from "ethers";
 
 const SWAP_COINS = [
@@ -109,6 +123,14 @@ router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
     const addr = getOrCreateAddress(user.sub, "solana");
     syncSolanaDepositsForUser(user.sub, addr).catch(() => {});
   }
+  if (isLitecoinCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "litecoin");
+    syncLitecoinDepositsForUser(user.sub, addr).catch(() => {});
+  }
+  if (isDogecoinCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "dogecoin");
+    syncDogecoinDepositsForUser(user.sub, addr).catch(() => {});
+  }
 
   const assets = rows.map((r) => ({
     chainId: r.chainId,
@@ -168,7 +190,12 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const { chainId, toAddress, amount, tokenId, evmChainId } = req.body;
+  const { chainId, toAddress, amount, tokenId, evmChainId, totpCode } = req.body;
+  const twofaCheck = require2FAIfEnabled(user.sub, totpCode);
+  if (!twofaCheck.ok) {
+    res.status(400).json({ message: twofaCheck.error, code: "2FA_REQUIRED" });
+    return;
+  }
   if (!chainId || !toAddress || !amount) {
     res.status(400).json({ message: "chainId, toAddress, and amount required" });
     return;
@@ -225,6 +252,8 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   const useEvmCustody = isEVMChain(chainId) && isCustodyEnabled();
   const useBtcCustody = chainId === "bitcoin" && isBitcoinCustodyEnabled();
   const useSolCustody = chainId === "solana" && isSolanaCustodyEnabled();
+  const useLtcCustody = chainId === "litecoin" && isLitecoinCustodyEnabled();
+  const useDogeCustody = chainId === "dogecoin" && isDogecoinCustodyEnabled();
 
   if (useEvmCustody) {
     const encKey = getEncryptedPrivateKey(user.sub, "evm");
@@ -314,6 +343,66 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
 
+  if (useLtcCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub, "litecoin");
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    const ltcAddr = getOrCreateAddress(user.sub, "litecoin");
+    try {
+      const chainBal = await getLitecoinBalance(ltcAddr);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const txHash = await sendLitecoin(encKey, toAddress.trim(), numAmount);
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), ltcAddr, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
+  if (useDogeCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub, "dogecoin");
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    const dogeAddr = getOrCreateAddress(user.sub, "dogecoin");
+    try {
+      const chainBal = await getDogecoinBalance(dogeAddr);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const txHash = await sendDogecoin(encKey, toAddress.trim(), numAmount);
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), dogeAddr, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
   ensureBalances(user.sub);
   const balance = db.prepare(
     "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
@@ -355,8 +444,42 @@ router.post("/sync-deposits", authMiddleware, async (req: Request, res: Response
     if (r.chainId === "solana") {
       total += await syncSolanaDepositsForUser(user.sub, r.address);
     }
+    if (r.chainId === "litecoin") {
+      total += await syncLitecoinDepositsForUser(user.sub, r.address);
+    }
+    if (r.chainId === "dogecoin") {
+      total += await syncDogecoinDepositsForUser(user.sub, r.address);
+    }
   }
   res.json({ success: true, newDeposits: total });
+});
+
+/** GET /transactions/:chainId/status/:txHash - Poll tx confirmation status */
+router.get("/transactions/:chainId/status/:txHash", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const { chainId, txHash } = req.params;
+  if (!chainId || !txHash) {
+    res.status(400).json({ message: "chainId and txHash required" });
+    return;
+  }
+  const row = db.prepare(
+    "SELECT 1 FROM transactions WHERE user_id = ? AND chain_id = ? AND tx_hash = ?"
+  ).get(user.sub, chainId, txHash);
+  if (!row) {
+    res.status(404).json({ message: "Transaction not found" });
+    return;
+  }
+  try {
+    const status = await getTxStatus(chainId, txHash);
+    res.json(status);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to fetch status";
+    res.status(500).json({ status: "unknown", error: msg });
+  }
 });
 
 router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Response) => {
@@ -390,7 +513,11 @@ router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Respons
               ? "https://polygonscan.com/tx/"
               : chainId === "avalanche-2"
                 ? "https://snowtrace.io/tx/"
-                : "";
+                : chainId === "litecoin"
+                  ? "https://blockstream.info/litecoin/tx/"
+                  : chainId === "dogecoin"
+                    ? "https://blockchair.com/dogecoin/transaction/"
+                    : "";
   res.json({ transactions, explorerTx });
 });
 
@@ -461,6 +588,12 @@ router.post("/swap-execution", authMiddleware, async (req: Request, res: Respons
   }
   if (isSolanaCustodyEnabled()) {
     syncSolanaDepositsForUser(user.sub, getOrCreateAddress(user.sub, "solana")).catch(() => {});
+  }
+  if (isLitecoinCustodyEnabled()) {
+    syncLitecoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "litecoin")).catch(() => {});
+  }
+  if (isDogecoinCustodyEnabled()) {
+    syncDogecoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "dogecoin")).catch(() => {});
   }
   const fromChain = CHAINS.find((c) => c.id === fromCoinId) || SWAP_COINS.find((c) => c.id === fromCoinId) || { id: fromCoinId, symbol: fromCoinId.toUpperCase().slice(0, 4), name: fromCoinId };
   const toChain = CHAINS.find((c) => c.id === toCoinId) || SWAP_COINS.find((c) => c.id === toCoinId) || { id: toCoinId, symbol: toCoinId.toUpperCase().slice(0, 4), name: toCoinId };

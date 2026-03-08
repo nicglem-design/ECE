@@ -14,6 +14,12 @@ const nextConfig = {
       { source: '/api/v1/accounts/:path*', destination: `${API_BACKEND}/api/v1/accounts/:path*` },
       { source: '/api/v1/kyc/:path*', destination: `${API_BACKEND}/api/v1/kyc/:path*` },
       { source: '/api/v1/ai/:path*', destination: `${API_BACKEND}/api/v1/ai/:path*` },
+      { source: '/api/v1/2fa/:path*', destination: `${API_BACKEND}/api/v1/2fa/:path*` },
+      { source: '/api/market/orders', destination: `${API_BACKEND}/api/v1/market/orders` },
+      { source: '/api/market/orders/:path*', destination: `${API_BACKEND}/api/v1/market/orders/:path*` },
+      { source: '/api/market/orderbook/:path*', destination: `${API_BACKEND}/api/v1/market/orderbook/:path*` },
+      { source: '/api/market/trades/:path*', destination: `${API_BACKEND}/api/v1/market/trades/:path*` },
+      { source: '/api/market/chart', destination: `${API_BACKEND}/api/v1/market/chart` },
     ];
   },
   webpack: (config, { dev }) => {

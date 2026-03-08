@@ -5,13 +5,42 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchExternal } from "@/lib/fetch-external";
-import { placeOrder } from "@/lib/orderbook/engine";
 import { COIN_TO_PAIR } from "@/lib/orderbook/types";
 import { getBinanceSymbol } from "@/lib/coin-symbol";
 
 export const dynamic = "force-dynamic";
 
 const SWAP_FEE_BPS = 50; // 0.5%
+const API_BACKEND = process.env.API_BACKEND_URL || "http://localhost:4000";
+const API_INTERNAL_KEY = process.env.API_INTERNAL_KEY || "";
+
+async function placeOrderViaApi(
+  userId: string,
+  pair: string,
+  side: "buy" | "sell",
+  price: number,
+  amount: number,
+  authHeader?: string | null
+): Promise<{ order: { id: string; filled: number }; trades: unknown[] }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (userId === "mm" && API_INTERNAL_KEY) {
+    headers["X-Internal-Key"] = API_INTERNAL_KEY;
+  } else if (authHeader) {
+    headers["Authorization"] = authHeader;
+  }
+  const res = await fetch(`${API_BACKEND}/api/v1/market/orders`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ userId, pair, side, price, amount }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error || "Place order failed");
+  }
+  return res.json();
+}
 const STABLECOINS = ["tether", "usd-coin", "dai", "first-digital-usd", "true-usd", "paxos-standard", "gemini-dollar", "frax", "liquity-usd"];
 
 function isStablecoin(coinId: string): boolean {
@@ -236,8 +265,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: walletResult.error }, { status: 400 });
         }
         const execPrice = Math.ceil(toPrice * 1.001);
-        placeOrder("mm", pair, "sell", execPrice, toAmount);
-        const { order } = placeOrder(uid, pair, "buy", execPrice, toAmount);
+        await placeOrderViaApi("mm", pair, "sell", execPrice, toAmount, authHeader);
+        const { order } = await placeOrderViaApi(uid, pair, "buy", execPrice, toAmount, authHeader);
         const filled = order.filled;
         return NextResponse.json({
           ok: true,
@@ -270,8 +299,8 @@ export async function POST(request: NextRequest) {
         if (!walletResult.ok) {
           return NextResponse.json({ error: walletResult.error }, { status: 400 });
         }
-        placeOrder("mm", pair, "buy", execPrice, fromAmount);
-        const { order } = placeOrder(uid, pair, "sell", execPrice, fromAmount);
+        await placeOrderViaApi("mm", pair, "buy", execPrice, fromAmount, authHeader);
+        const { order } = await placeOrderViaApi(uid, pair, "sell", execPrice, fromAmount, authHeader);
         const filled = order.filled;
         return NextResponse.json({
           ok: true,
@@ -308,13 +337,13 @@ export async function POST(request: NextRequest) {
         if (!walletResult.ok) {
           return NextResponse.json({ error: walletResult.error }, { status: 400 });
         }
-        placeOrder("mm", fromPair, "buy", sellPrice, fromAmount);
-        const { order: sellOrder } = placeOrder(uid, fromPair, "sell", sellPrice, fromAmount);
+        await placeOrderViaApi("mm", fromPair, "buy", sellPrice, fromAmount, authHeader);
+        const { order: sellOrder } = await placeOrderViaApi(uid, fromPair, "sell", sellPrice, fromAmount, authHeader);
         const actualUsdt = sellOrder.filled * sellPrice;
         const actualToBuy = actualUsdt / toPrice;
         const buyPrice = Math.ceil(toPrice * 1.001);
-        placeOrder("mm", toPair, "sell", buyPrice, actualToBuy);
-        const { order: buyOrder } = placeOrder(uid, toPair, "buy", buyPrice, actualToBuy);
+        await placeOrderViaApi("mm", toPair, "sell", buyPrice, actualToBuy, authHeader);
+        const { order: buyOrder } = await placeOrderViaApi(uid, toPair, "buy", buyPrice, actualToBuy, authHeader);
         return NextResponse.json({
           ok: true,
           swapId: `swap_${sellOrder.id}_${buyOrder.id}`,

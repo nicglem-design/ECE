@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
 import { config } from "../config";
+import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
@@ -238,7 +239,12 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const { currency, amount, linkedAccountId } = req.body;
+  const { currency, amount, linkedAccountId, totpCode } = req.body;
+  const twofaCheck = require2FAIfEnabled(user.sub, totpCode);
+  if (!twofaCheck.ok) {
+    res.status(400).json({ message: twofaCheck.error, code: "2FA_REQUIRED" });
+    return;
+  }
   const curr = (currency || "USD").toUpperCase();
   if (!SUPPORTED_FIAT.includes(curr)) {
     res.status(400).json({ message: "Unsupported currency" });

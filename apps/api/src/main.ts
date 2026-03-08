@@ -8,6 +8,8 @@ import walletRoutes from "./routes/wallet";
 import accountsRoutes from "./routes/accounts";
 import kycRoutes from "./routes/kyc";
 import aiRoutes from "./routes/ai";
+import marketRoutes from "./routes/market";
+import twofaRoutes from "./routes/twofa";
 import { config } from "./config";
 import { apiLimiter, authLimiter } from "./middleware/rateLimit";
 
@@ -29,6 +31,8 @@ app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/accounts", accountsRoutes);
 app.use("/api/v1/kyc", kycRoutes);
 app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/market", marketRoutes);
+app.use("/api/v1/2fa", twofaRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

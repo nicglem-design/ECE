@@ -32,6 +32,9 @@ function SendPageContent() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ txHash?: string } | null>(null);
+  const [show2FA, setShow2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const [txConfirming, setTxConfirming] = useState(false);
 
   const TOKEN_OPTIONS = [
     { id: "tether", name: "Tether", symbol: "USDT" },
@@ -114,10 +117,46 @@ function SendPageContent() {
   const loading = chainsLoading || balancesLoading;
   const selectedAsset = assets.find((a) => a.chainId === chainId);
 
+  async function doSend(code?: string) {
+    const amt = amountCrypto.trim();
+    const body: Record<string, string> = {
+      chainId,
+      toAddress: toAddress.trim(),
+      amount: amt,
+    };
+    if (isERC20Token) {
+      body.tokenId = chainId;
+      body.evmChainId = evmChainId;
+    }
+    if (code) body.totpCode = code;
+    return apiPost<{ success: boolean; txHash?: string }>("/api/v1/wallet/send", body);
+  }
+
+  async function pollTxStatus(txHash: string) {
+    setTxConfirming(true);
+    const maxAttempts = 30;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const st = await apiGet<{ status: string }>(
+          `/api/v1/wallet/transactions/${chainId}/status/${encodeURIComponent(txHash)}`
+        );
+        if (st.status === "confirmed") {
+          setTxConfirming(false);
+          return;
+        }
+      } catch {
+        // continue polling
+      }
+    }
+    setTxConfirming(false);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSuccess(null);
+    setShow2FA(false);
     const amt = amountCrypto.trim();
     if (!chainId || !toAddress.trim() || !amt) {
       setError(t("send.enterValidAmount"));
@@ -130,22 +169,21 @@ function SendPageContent() {
     }
     setSending(true);
     try {
-      const body: Record<string, string> = {
-        chainId,
-        toAddress: toAddress.trim(),
-        amount: amt,
-      };
-      if (isERC20Token) {
-        body.tokenId = chainId;
-        body.evmChainId = evmChainId;
-      }
-      const res = await apiPost<{ success: boolean; txHash?: string }>("/api/v1/wallet/send", body);
+      const res = await doSend(totpCode || undefined);
       setSuccess(res);
       setAmountCrypto("");
       setAmountFiat("");
       setToAddress("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("send.failed"));
+      setTotpCode("");
+      if (res.txHash) pollTxStatus(res.txHash);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("2FA")) {
+        setShow2FA(true);
+        setError("");
+      } else {
+        setError(msg || t("send.failed"));
+      }
     } finally {
       setSending(false);
     }
@@ -282,9 +320,28 @@ function SendPageContent() {
                   </p>
                 )}
               </div>
+              {show2FA && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                  <label className="block text-sm font-medium text-amber-200">
+                    {t("send.twofaLabel") || "Enter 2FA code"}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 font-mono text-lg tracking-widest text-slate-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              )}
               {error && <p className="text-red-400">{error}</p>}
               {success && (
-                <p className="text-green-400">{t("send.transactionSent")}</p>
+                <p className="text-green-400">
+                  {t("send.transactionSent")}
+                  {txConfirming && " — " + (t("send.confirming") || "Confirming...")}
+                </p>
               )}
               <button
                 type="submit"

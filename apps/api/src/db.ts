@@ -136,6 +136,14 @@ db.exec(`
     PRIMARY KEY (user_id, chain_type),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS user_2fa (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    totp_secret TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 try {

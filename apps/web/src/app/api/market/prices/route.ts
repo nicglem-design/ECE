@@ -5,9 +5,30 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getOurPrices } from "@/lib/orderbook/engine";
 import { getConsensusPrices } from "@/lib/crypto-consensus";
 import { fetchExternal } from "@/lib/fetch-external";
+
+const API_BACKEND = process.env.API_BACKEND_URL || "http://localhost:4000";
+
+async function getOurPricesFromApi(currency: string): Promise<{
+  prices: Record<string, number>;
+  priceChange24h: Record<string, number>;
+  source: "orderbook";
+} | null> {
+  try {
+    const res = await fetch(`${API_BACKEND}/api/v1/market/prices?currency=${currency}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { prices?: Record<string, number>; priceChange24h?: Record<string, number>; source?: string };
+    if (!data.prices || data.source !== "orderbook") return null;
+    return {
+      prices: data.prices,
+      priceChange24h: data.priceChange24h ?? {},
+      source: "orderbook",
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -51,7 +72,7 @@ export async function GET(request: NextRequest) {
     ? idsParam.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
     : null;
 
-  const ourPrices = getOurPrices(currency);
+  const ourPrices = await getOurPricesFromApi(currency);
   const hasOrderbookActive = ourPrices && Object.keys(ourPrices.prices).length > 1;
 
   // When ids provided (e.g. Popular 5): merge orderbook (when active) with CoinGecko for others
