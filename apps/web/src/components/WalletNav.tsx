@@ -14,6 +14,7 @@ export function WalletNav() {
   const router = useRouter();
   const pathname = usePathname() ?? "";
   const isWallet = pathname === "/wallet" || pathname.startsWith("/wallet/") || pathname === "/dashboard";
+  const isAccounts = pathname === "/accounts";
 
   return (
     <header className="border-b border-slate-800/50">
@@ -28,6 +29,12 @@ export function WalletNav() {
           </Link>
           <Link href="/wallet/portfolio" className="text-sm text-slate-400 hover:text-sky-400">
             {t("nav.portfolio")}
+          </Link>
+          <Link
+            href="/accounts"
+            className={`text-sm ${isAccounts ? "text-green-400" : "text-slate-400 hover:text-sky-400"}`}
+          >
+            Accounts
           </Link>
           <Link href="/exchange" className="text-sm text-slate-400 hover:text-sky-400">
             {t("nav.exchange")}

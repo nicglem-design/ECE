@@ -179,8 +179,32 @@ export default function WalletPage() {
                   <p className="mt-2 text-lg text-slate-400">{t("wallet.receiveDesc")}</p>
                 </Link>
                 <Link
+                  href="/accounts"
+                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-green-500/30 hover:bg-slate-800/30"
+                >
+                  <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/20">
+                    <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </span>
+                  <h3 className="text-2xl font-medium text-green-400">Accounts</h3>
+                  <p className="mt-2 text-lg text-slate-400">Deposit & withdraw to bank or card</p>
+                </Link>
+                <Link
+                  href="/wallet/deposit"
+                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-sky-500/30 hover:bg-slate-800/30"
+                >
+                  <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/20">
+                    <svg className="h-6 w-6 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </span>
+                  <h3 className="text-2xl font-medium text-sky-400">Add crypto</h3>
+                  <p className="mt-2 text-lg text-slate-400">Simulated crypto deposit</p>
+                </Link>
+                <Link
                   href="/exchange"
-                  className="col-span-2 flex min-h-[100px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-amber-500/30 hover:bg-slate-800/30"
+                  className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8 text-center transition hover:border-amber-500/30 hover:bg-slate-800/30"
                 >
                   <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/20">
                     <svg className="h-6 w-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

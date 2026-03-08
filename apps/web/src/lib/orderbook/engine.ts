@@ -1,18 +1,68 @@
 /**
  * Order book and matching engine.
- * Price-time priority. In-memory store (swap to DB/Redis when scaling).
+ * Price-time priority. In-memory store with optional file persistence.
  */
 
 import type { Order, Trade, OrderBookLevel, OrderBookSnapshot } from "./types";
 import { PAIR_TO_COIN } from "./types";
+import { loadState, saveState } from "./persistence";
 
 let orderIdCounter = 0;
 let tradeIdCounter = 0;
 
 const orders = new Map<string, Order>();
 const tradesByPair = new Map<string, Trade[]>();
-const bidsByPair = new Map<string, Map<number, number>>(); // price -> total amount
+const bidsByPair = new Map<string, Map<number, number>>();
 const asksByPair = new Map<string, Map<number, number>>();
+
+function restoreFromState(state: { orderIdCounter: number; tradeIdCounter: number; orders: Order[]; tradesByPair: Record<string, Trade[]>; bidsByPair: Record<string, Record<string, number>>; asksByPair: Record<string, Record<string, number>> }): void {
+  orderIdCounter = state.orderIdCounter;
+  tradeIdCounter = state.tradeIdCounter;
+  orders.clear();
+  for (const o of state.orders) orders.set(o.id, o);
+  tradesByPair.clear();
+  for (const [pair, trades] of Object.entries(state.tradesByPair)) {
+    tradesByPair.set(pair, trades);
+  }
+  bidsByPair.clear();
+  asksByPair.clear();
+  for (const [pair, levels] of Object.entries(state.bidsByPair)) {
+    const m = new Map<number, number>();
+    for (const [p, amt] of Object.entries(levels)) m.set(Number(p), amt);
+    bidsByPair.set(pair, m);
+  }
+  for (const [pair, levels] of Object.entries(state.asksByPair)) {
+    const m = new Map<number, number>();
+    for (const [p, amt] of Object.entries(levels)) m.set(Number(p), amt);
+    asksByPair.set(pair, m);
+  }
+}
+
+function persist(): void {
+  const bids: Record<string, Record<string, number>> = {};
+  const asks: Record<string, Record<string, number>> = {};
+  for (const [pair, m] of bidsByPair.entries()) {
+    bids[pair] = Object.fromEntries(m);
+  }
+  for (const [pair, m] of asksByPair.entries()) {
+    asks[pair] = Object.fromEntries(m);
+  }
+  const trades: Record<string, Trade[]> = {};
+  for (const [pair, arr] of tradesByPair.entries()) {
+    trades[pair] = arr;
+  }
+  saveState({
+    orderIdCounter,
+    tradeIdCounter,
+    orders: Array.from(orders.values()),
+    tradesByPair: trades,
+    bidsByPair: bids,
+    asksByPair: asks,
+  });
+}
+
+const loaded = loadState();
+if (loaded) restoreFromState(loaded);
 
 function nextOrderId(): string {
   return `ord_${Date.now()}_${++orderIdCounter}`;
@@ -125,6 +175,7 @@ export function placeOrder(
     addToBook(ourBook, price, -order.filled);
   }
 
+  persist();
   return { order, trades };
 }
 

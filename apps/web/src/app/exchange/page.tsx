@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CryptoListWidget } from "@/components/CryptoListWidget";
 import { PopularCryptoWidget } from "@/components/PopularCryptoWidget";
 import { SwapWidget } from "@/components/SwapWidget";
+import { LimitOrderWidget } from "@/components/LimitOrderWidget";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
 
 function ExchangeContent() {
@@ -38,6 +39,9 @@ function ExchangeContent() {
             <div className="flex gap-6">
               <Link href="/wallet" className="text-sm text-slate-400 hover:text-sky-400">
                 {t("nav.wallet")}
+              </Link>
+              <Link href="/accounts" className="text-sm text-slate-400 hover:text-sky-400">
+                Accounts
               </Link>
               <Link href="/market" className="text-sm text-slate-400 hover:text-sky-400">
                 {t("nav.market")}
@@ -96,13 +100,18 @@ function ExchangeContent() {
               <CryptoListWidget />
               <PopularCryptoWidget />
             </div>
-            <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
-              <h2 className="text-lg font-semibold text-slate-200">Swap</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Swap any cryptocurrency using live market prices.
-              </p>
-              <div className="mt-6">
-                <SwapWidget initialBuyCoinId={buyCoinId || undefined} />
+            <div className="space-y-8">
+              <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
+                <h2 className="text-lg font-semibold text-slate-200">Swap</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Swap any cryptocurrency using live market prices.
+                </p>
+                <div className="mt-6">
+                  <SwapWidget initialBuyCoinId={buyCoinId || undefined} />
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
+                <LimitOrderWidget />
               </div>
             </div>
           </div>

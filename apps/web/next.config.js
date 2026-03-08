@@ -10,6 +10,8 @@ const nextConfig = {
       { source: '/api/v1/wallet/:path*', destination: `${API_BACKEND}/api/v1/wallet/:path*` },
       { source: '/api/v1/profile', destination: `${API_BACKEND}/api/v1/profile` },
       { source: '/api/v1/profile/:path*', destination: `${API_BACKEND}/api/v1/profile/:path*` },
+      { source: '/api/v1/accounts', destination: `${API_BACKEND}/api/v1/accounts` },
+      { source: '/api/v1/accounts/:path*', destination: `${API_BACKEND}/api/v1/accounts/:path*` },
       { source: '/api/v1/kyc/:path*', destination: `${API_BACKEND}/api/v1/kyc/:path*` },
       { source: '/api/v1/ai/:path*', destination: `${API_BACKEND}/api/v1/ai/:path*` },
     ];
