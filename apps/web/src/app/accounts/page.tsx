@@ -36,6 +36,38 @@ export default function AccountsPage() {
   const [addLabel, setAddLabel] = useState("");
   const [addLastFour, setAddLastFour] = useState("");
   const [addLoading, setAddLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const handlePayWithCard = async () => {
+    const amt = parseFloat(depositAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setDepositError("Enter a valid amount");
+      return;
+    }
+    setCheckoutLoading(true);
+    setDepositError(null);
+    try {
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const data = await apiPost<{ url?: string; message?: string }>(
+        "/api/v1/accounts/create-checkout",
+        {
+          currency: depositCurrency,
+          amount: amt,
+          successUrl: `${base}/accounts?deposit=success`,
+          cancelUrl: `${base}/accounts?deposit=cancelled`,
+        }
+      );
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setDepositError(data.message || "Checkout not available");
+      }
+    } catch (err) {
+      setDepositError(err instanceof Error ? err.message : "Checkout failed");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
 
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmount);
@@ -199,13 +231,22 @@ export default function AccountsPage() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={handleDeposit}
-                disabled={depositLoading || !depositAmount}
-                className="w-full rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
-              >
-                {depositLoading ? "Depositing..." : "Deposit"}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handlePayWithCard}
+                  disabled={checkoutLoading || depositLoading || !depositAmount}
+                  className="flex-1 rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                >
+                  {checkoutLoading ? "Redirecting..." : "Pay with card"}
+                </button>
+                <button
+                  onClick={handleDeposit}
+                  disabled={depositLoading || !depositAmount}
+                  className="flex-1 rounded-xl border border-slate-600 py-3 font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                >
+                  {depositLoading ? "Adding..." : "Add (demo)"}
+                </button>
+              </div>
             </div>
             {depositSuccess && (
               <div className="mt-3 rounded-lg border border-green-800/50 bg-green-900/20 px-4 py-2 text-sm text-green-400">

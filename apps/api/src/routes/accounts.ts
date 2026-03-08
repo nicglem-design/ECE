@@ -1,9 +1,12 @@
 import { Router, Request, Response } from "express";
+import Stripe from "stripe";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
+import { config } from "../config";
 import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
+const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
 
 const SUPPORTED_FIAT = ["USD", "EUR", "GBP", "SEK"];
 
@@ -37,7 +40,66 @@ router.get("/fiat", authMiddleware, (req: Request, res: Response) => {
   res.json({ balances });
 });
 
-/** POST /api/v1/accounts/deposit - Simulated fiat deposit */
+/** POST /api/v1/accounts/create-checkout - Create Stripe Checkout session for real deposit */
+router.post("/create-checkout", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  if (!stripe) {
+    res.status(503).json({ message: "Stripe not configured. Set STRIPE_SECRET_KEY." });
+    return;
+  }
+  const { currency, amount, successUrl, cancelUrl } = req.body;
+  const curr = (currency || "USD").toUpperCase();
+  if (!SUPPORTED_FIAT.includes(curr)) {
+    res.status(400).json({ message: "Unsupported currency" });
+    return;
+  }
+  const numAmount = parseFloat(String(amount));
+  if (isNaN(numAmount) || numAmount <= 0 || numAmount > 10000) {
+    res.status(400).json({ message: "Amount must be between 0 and 10000" });
+    return;
+  }
+  const amountCents = Math.round(numAmount * 100);
+  if (amountCents < 50) {
+    res.status(400).json({ message: "Minimum deposit is 0.50" });
+    return;
+  }
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: curr.toLowerCase(),
+          product_data: {
+            name: "Deposit to KanoXchange",
+            description: `Add ${numAmount} ${curr} to your account`,
+          },
+          unit_amount: amountCents,
+        },
+        quantity: 1,
+      }],
+      mode: "payment",
+      success_url: successUrl || config.stripeSuccessUrl,
+      cancel_url: cancelUrl || config.stripeCancelUrl,
+      client_reference_id: user.sub,
+      metadata: { userId: user.sub, currency: curr, amount: String(numAmount) },
+    });
+    const paymentId = `pay_${session.id}`;
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO stripe_payments (id, user_id, currency, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(paymentId, user.sub, curr, numAmount, "pending", now);
+    res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Checkout failed";
+    res.status(500).json({ message: msg });
+  }
+});
+
+/** POST /api/v1/accounts/deposit - Simulated fiat deposit (when Stripe not configured) */
 router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
@@ -65,6 +127,44 @@ router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, curr, "deposit", numAmount, "completed", method || "card", now);
   res.json({ success: true, amount: numAmount, currency: curr });
+});
+
+/** POST /api/v1/accounts/stripe-webhook - Stripe webhook for payment completion */
+router.post("/stripe-webhook", (req: Request, res: Response) => {
+  if (!stripe || !config.stripeWebhookSecret) {
+    res.status(503).send("Stripe webhook not configured");
+    return;
+  }
+  const sig = req.headers["stripe-signature"] as string;
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      config.stripeWebhookSecret
+    );
+  } catch (err) {
+    res.status(400).send(`Webhook Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    return;
+  }
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const userId = session.client_reference_id || session.metadata?.userId;
+    const amount = parseFloat(session.metadata?.amount || "0");
+    const currency = (session.metadata?.currency || "USD").toUpperCase();
+    if (userId && amount > 0 && SUPPORTED_FIAT.includes(currency)) {
+      const now = Date.now();
+      ensureFiatBalance(userId, currency);
+      db.prepare(
+        "UPDATE fiat_balances SET amount = amount + ?, updated_at = ? WHERE user_id = ? AND currency = ?"
+      ).run(amount, now, userId, currency);
+      const txId = `fiat_dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      db.prepare(
+        "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, userId, currency, "deposit", amount, "completed", "stripe", now);
+    }
+  }
+  res.json({ received: true });
 });
 
 /** POST /api/v1/accounts/withdraw - Withdraw fiat to linked account or card */

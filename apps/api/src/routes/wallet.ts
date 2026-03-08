@@ -1,7 +1,16 @@
 import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
-import { CHAINS, deriveAddress } from "../chains";
+import { CHAINS } from "../chains";
+import { getOrCreateAddress, getAddress, getEncryptedPrivateKey } from "../crypto/addresses";
+import {
+  isCustodyEnabled,
+  isEVMChain,
+  getChainBalance,
+  sendNative,
+} from "../crypto/custody";
+import { syncDepositsForUser } from "../crypto/depositSync";
+import { parseEther } from "ethers";
 
 const SWAP_COINS = [
   { id: "tether", symbol: "USDT", name: "Tether" },
@@ -31,29 +40,13 @@ router.get("/addresses", authMiddleware, (req: Request, res: Response) => {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const rows = db.prepare("SELECT chain_id as chainId, address FROM addresses WHERE user_id = ?").all(user.sub) as { chainId: string; address: string }[];
-  if (rows.length === 0) {
-    const addresses = CHAINS.map((c) => ({
+  const addresses = CHAINS.map((c) => {
+    const address = getOrCreateAddress(user.sub, c.id);
+    return {
       chainId: c.id,
-      address: deriveAddress(user.sub, c.id),
+      address,
       name: c.name,
       symbol: c.symbol,
-    }));
-    const insert = db.prepare("INSERT OR IGNORE INTO addresses (user_id, chain_id, address, created_at) VALUES (?, ?, ?, ?)");
-    const now = Date.now();
-    for (const a of addresses) {
-      insert.run(user.sub, a.chainId, a.address, now);
-    }
-    res.json({ addresses });
-    return;
-  }
-  const addresses = rows.map((r) => {
-    const chain = CHAINS.find((c) => c.id === r.chainId);
-    return {
-      chainId: r.chainId,
-      address: r.address,
-      name: chain?.name || r.chainId,
-      symbol: chain?.symbol || r.chainId,
     };
   });
   res.json({ addresses });
@@ -73,7 +66,7 @@ function ensureBalances(userId: string): void {
   insert.run(userId, "tether", "USDT", "Tether", 1000, now);
 }
 
-router.get("/balances", authMiddleware, (req: Request, res: Response) => {
+router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -83,16 +76,32 @@ router.get("/balances", authMiddleware, (req: Request, res: Response) => {
   const rows = db.prepare(
     "SELECT chain_id as chainId, symbol, name, amount FROM balances WHERE user_id = ?"
   ).all(user.sub) as { chainId: string; symbol: string; name: string; amount: number }[];
-  const assets = rows.map((r) => ({
-    chainId: r.chainId,
-    symbol: r.symbol,
-    name: r.name,
-    amount: String(r.amount),
-  }));
+
+  if (isCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "ethereum");
+    for (const c of ["ethereum", "binancecoin", "matic-network", "avalanche-2"]) {
+      syncDepositsForUser(user.sub, c, addr).catch(() => {});
+    }
+  }
+
+  const assets: { chainId: string; symbol: string; name: string; amount: string }[] = [];
+  for (const r of rows) {
+    if (isEVMChain(r.chainId) && isCustodyEnabled()) {
+      try {
+        const address = getOrCreateAddress(user.sub, r.chainId);
+        const chainBal = await getChainBalance(r.chainId, address);
+        assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: chainBal });
+      } catch {
+        assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: String(r.amount) });
+      }
+    } else {
+      assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: String(r.amount) });
+    }
+  }
   res.json({ assets });
 });
 
-router.post("/send", authMiddleware, (req: Request, res: Response) => {
+router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -113,6 +122,39 @@ router.post("/send", authMiddleware, (req: Request, res: Response) => {
     res.status(400).json({ message: "Unsupported chain" });
     return;
   }
+  const myAddress = getOrCreateAddress(user.sub, chainId);
+  const useRealCustody = isEVMChain(chainId) && isCustodyEnabled();
+
+  if (useRealCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub);
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    try {
+      const chainBal = await getChainBalance(chainId, myAddress);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const amountWei = parseEther(String(numAmount));
+      const txHash = await sendNative(chainId, encKey, toAddress.trim(), amountWei);
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
   ensureBalances(user.sub);
   const balance = db.prepare(
     "SELECT amount FROM balances WHERE user_id = ? AND chain_id = ?"
@@ -124,7 +166,6 @@ router.post("/send", authMiddleware, (req: Request, res: Response) => {
   const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
   const txHash = `0x${Buffer.from(txId).toString("hex").slice(0, 64)}`;
   const now = Date.now();
-  const myAddress = deriveAddress(user.sub, chainId);
   db.prepare(
     "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
   ).run(numAmount, now, user.sub, chainId);
@@ -132,6 +173,25 @@ router.post("/send", authMiddleware, (req: Request, res: Response) => {
     "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
   res.json({ success: true, txHash });
+});
+
+/** POST /sync-deposits - Sync incoming deposits from chain. Call periodically (cron). */
+router.post("/sync-deposits", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  let total = 0;
+  const rows = db.prepare(
+    "SELECT chain_id as chainId, address FROM addresses WHERE user_id = ?"
+  ).all(user.sub) as { chainId: string; address: string }[];
+  for (const r of rows) {
+    if (isEVMChain(r.chainId)) {
+      total += await syncDepositsForUser(user.sub, r.chainId, r.address);
+    }
+  }
+  res.json({ success: true, newDeposits: total });
 });
 
 router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Response) => {
@@ -190,7 +250,7 @@ router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
   const txId = `dep_${Date.now()}_${uuidv4().slice(0, 8)}`;
   db.prepare(
     "INSERT INTO transactions (id, user_id, chain_id, type, amount, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(txId, user.sub, chainId, "received", String(numAmount), deriveAddress(user.sub, chainId), `0x${txId}`, now);
+  ).run(txId, user.sub, chainId, "received", String(numAmount), getOrCreateAddress(user.sub, chainId), `0x${txId}`, now);
   res.json({ success: true, amount: numAmount });
 });
 

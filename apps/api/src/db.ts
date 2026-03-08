@@ -80,6 +80,17 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS stripe_payments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    amount REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    stripe_payment_intent_id TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS fiat_transactions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -105,4 +116,23 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_fiat_transactions_user ON fiat_transactions(user_id);
+
+  CREATE TABLE IF NOT EXISTS deposit_sync (
+    user_id TEXT NOT NULL,
+    chain_id TEXT NOT NULL,
+    block_number INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, chain_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS wallet_keys (
+    user_id TEXT NOT NULL,
+    chain_type TEXT NOT NULL,
+    address TEXT NOT NULL,
+    encrypted_private_key TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, chain_type),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);

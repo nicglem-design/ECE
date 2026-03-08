@@ -34,6 +34,24 @@ Copy `.env.example` to `.env` and configure:
 4. Request body limit: 100kb
 5. KYC webhook: Configure Sumsub to POST to `https://your-api/api/v1/kyc/webhook` for `applicantReviewed` events
 
+## Real custody (EVM)
+
+When `WALLET_ENCRYPTION_KEY` (or `JWT_SECRET`) is set and RPC URLs are configured:
+
+- **Real wallets**: New users get real Ethereum wallets (same address for all EVM chains)
+- **Real send**: Signs and broadcasts transactions on-chain
+- **Real balance**: Fetched from chain via RPC
+- **Deposit detection**: Call `POST /api/v1/wallet/sync-deposits` periodically, or it runs in background on balance fetch
+
+RPC URLs default to public endpoints. For production, use Infura/Alchemy.
+
+## Stripe payments
+
+When `STRIPE_SECRET_KEY` is set:
+
+- **Pay with card**: `POST /api/v1/accounts/create-checkout` creates a Checkout session
+- **Webhook**: Configure Stripe to POST to `https://your-api/api/v1/accounts/stripe-webhook` for `checkout.session.completed`
+
 ## Endpoints
 
 | Path | Method | Auth | Description |

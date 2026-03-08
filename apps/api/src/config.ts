@@ -11,6 +11,10 @@ export const config = {
   sumsubAppToken: process.env.SUMSUB_APP_TOKEN || "",
   sumsubSecretKey: process.env.SUMSUB_SECRET_KEY || "",
   sumsubBaseUrl: process.env.SUMSUB_BASE_URL || "https://api.sumsub.com",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  stripeSuccessUrl: process.env.STRIPE_SUCCESS_URL || "http://localhost:3000/accounts?deposit=success",
+  stripeCancelUrl: process.env.STRIPE_CANCEL_URL || "http://localhost:3000/accounts?deposit=cancelled",
   isProduction: isProd,
 };
 

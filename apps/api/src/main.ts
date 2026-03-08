@@ -19,6 +19,7 @@ if (!fs.existsSync(dataDir)) {
 }
 
 app.use(cors({ origin: true, credentials: true }));
+app.use("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "100kb" }));
 app.use("/api/v1", apiLimiter);
 
