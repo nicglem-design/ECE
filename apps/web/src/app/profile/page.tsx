@@ -13,6 +13,7 @@ import { applyTheme } from "@/components/ThemeInit";
 import { ALL_LOCALES, type LocaleCode } from "@/lib/translations";
 import { FiatCurrencyCombobox } from "@/components/FiatCurrencyCombobox";
 import { useTerminology } from "@/contexts/TerminologyContext";
+import { apiGet, apiPost } from "@/lib/apiClient";
 
 const THEME_OPTIONS = [
   { value: "light", label: "Light" },
@@ -40,6 +41,11 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [langSearch, setLangSearch] = useState("");
+  const [twofaEnabled, setTwofaEnabled] = useState(false);
+  const [twofaLoading, setTwofaLoading] = useState(false);
+  const [twofaSetup, setTwofaSetup] = useState<{ qrDataUrl: string; secret: string } | null>(null);
+  const [twofaVerifyCode, setTwofaVerifyCode] = useState("");
+  const [twofaDisableCode, setTwofaDisableCode] = useState("");
 
   useEffect(() => {
     if (profile) {
@@ -50,6 +56,12 @@ export default function ProfilePage() {
       setCurrency(profile.preferredCurrency || "usd");
     }
   }, [profile, setCurrency]);
+
+  useEffect(() => {
+    apiGet<{ enabled: boolean }>("/api/v1/2fa/status")
+      .then((d) => setTwofaEnabled(d.enabled))
+      .catch(() => {});
+  }, []);
 
   const filteredLocales = langSearch
     ? ALL_LOCALES.filter(
@@ -261,6 +273,107 @@ export default function ProfilePage() {
               </button>
             </form>
           ) : null}
+          <div className="mt-8 rounded-lg border border-slate-700 bg-slate-800/50 p-6">
+            <h2 className="text-lg font-medium text-slate-200">Two-factor authentication (2FA)</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Require a code from your authenticator app when sending crypto or withdrawing fiat.
+            </p>
+            {twofaEnabled ? (
+              <div className="mt-4">
+                <p className="text-sm text-green-400">2FA is enabled</p>
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={twofaDisableCode}
+                    onChange={(e) => setTwofaDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="Enter code to disable"
+                    className="w-36 rounded border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-slate-200"
+                  />
+                  <button
+                    type="button"
+                    disabled={twofaLoading || twofaDisableCode.length !== 6}
+                    onClick={async () => {
+                      setTwofaLoading(true);
+                      try {
+                        await apiPost("/api/v1/2fa/disable", { code: twofaDisableCode });
+                        setTwofaEnabled(false);
+                        setTwofaDisableCode("");
+                      } catch {
+                        // ignore
+                      } finally {
+                        setTwofaLoading(false);
+                      }
+                    }}
+                    className="rounded bg-red-500/20 px-4 py-2 text-sm text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    Disable 2FA
+                  </button>
+                </div>
+              </div>
+            ) : twofaSetup ? (
+              <div className="mt-4">
+                <p className="text-sm text-slate-400">Scan with your authenticator app, then enter the code:</p>
+                <img src={twofaSetup.qrDataUrl} alt="QR" className="mt-2 h-32 w-32" />
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={twofaVerifyCode}
+                    onChange={(e) => setTwofaVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="w-36 rounded border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-slate-200"
+                  />
+                  <button
+                    type="button"
+                    disabled={twofaLoading || twofaVerifyCode.length !== 6}
+                    onClick={async () => {
+                      setTwofaLoading(true);
+                      try {
+                        await apiPost("/api/v1/2fa/verify", { code: twofaVerifyCode });
+                        setTwofaSetup(null);
+                        setTwofaVerifyCode("");
+                        setTwofaEnabled(true);
+                      } catch {
+                        // ignore
+                      } finally {
+                        setTwofaLoading(false);
+                      }
+                    }}
+                    className="rounded bg-sky-500 px-4 py-2 text-sm text-white hover:bg-sky-600 disabled:opacity-50"
+                  >
+                    Enable 2FA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setTwofaSetup(null); setTwofaVerifyCode(""); }}
+                    className="text-sm text-slate-500 hover:text-slate-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={twofaLoading}
+                onClick={async () => {
+                  setTwofaLoading(true);
+                  try {
+                    const d = await apiPost<{ qrDataUrl: string; secret: string }>("/api/v1/2fa/setup", {});
+                    setTwofaSetup(d);
+                  } catch {
+                    // ignore
+                  } finally {
+                    setTwofaLoading(false);
+                  }
+                }}
+                className="mt-4 rounded bg-sky-500/20 px-4 py-2 text-sm text-sky-400 hover:bg-sky-500/30 disabled:opacity-50"
+              >
+                Enable 2FA
+              </button>
+            )}
+          </div>
           <div className="mt-6 flex flex-wrap gap-4">
             <Link href="/kyc" className="text-sky-400 hover:underline">
               {t("kyc.verifyIdentity")}
