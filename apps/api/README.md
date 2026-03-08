@@ -51,6 +51,7 @@ When `STRIPE_SECRET_KEY` is set:
 
 - **Pay with card**: `POST /api/v1/accounts/create-checkout` creates a Checkout session
 - **Webhook**: Configure Stripe to POST to `https://your-api/api/v1/accounts/stripe-webhook` for `checkout.session.completed`
+- **Connect onboarding**: `POST /api/v1/accounts/connect-onboarding` creates a Stripe Connect Express account link for real bank withdrawals. Set `STRIPE_CONNECT_RETURN_URL` and `STRIPE_CONNECT_REFRESH_URL` for production.
 
 ## Endpoints
 
@@ -62,7 +63,8 @@ When `STRIPE_SECRET_KEY` is set:
 | `/api/v1/wallet/chains` | GET | No | Supported chains |
 | `/api/v1/wallet/addresses` | GET | Yes | User addresses |
 | `/api/v1/wallet/balances` | GET | Yes | User balances |
-| `/api/v1/wallet/send` | POST | Yes | Send crypto (simulated) |
+| `/api/v1/wallet/send` | POST | Yes | Send crypto (native, ERC20, BTC, SOL when custody enabled) |
+| `/api/v1/wallet/estimate-gas` | GET | Yes | Estimate gas fee for EVM sends |
 | `/api/v1/wallet/transactions/:chainId` | GET | Yes | Transaction history |
 | `/api/v1/wallet/swap-execution` | POST | Yes | Update balances after swap |
 | `/api/v1/accounts/fiat` | GET | Yes | Fiat balances |

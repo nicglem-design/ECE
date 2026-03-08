@@ -143,3 +143,8 @@ try {
 } catch {
   // Column may already exist
 }
+try {
+  db.exec("ALTER TABLE profiles ADD COLUMN stripe_connect_account_id TEXT");
+} catch {
+  // Column may already exist
+}

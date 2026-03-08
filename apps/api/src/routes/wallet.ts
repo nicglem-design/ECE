@@ -11,6 +11,8 @@ import {
   ERC20_CONTRACTS,
   getERC20Balance,
   sendERC20,
+  estimateGasForNative,
+  estimateGasForERC20,
 } from "../crypto/custody";
 import {
   isBitcoinCustodyEnabled,
@@ -23,6 +25,7 @@ import {
   sendSolana,
 } from "../crypto/custody-solana";
 import { syncDepositsForUser } from "../crypto/depositSync";
+import { validateAddress } from "../crypto/addressValidation";
 import { syncBitcoinDepositsForUser } from "../crypto/depositSync-bitcoin";
 import { syncSolanaDepositsForUser } from "../crypto/depositSync-solana";
 import { parseEther } from "ethers";
@@ -116,6 +119,49 @@ router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
   res.json({ assets });
 });
 
+/** GET /estimate-gas - Estimate gas fee for EVM send (native or ERC20). */
+router.get("/estimate-gas", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const { chainId, toAddress, amount, tokenId, evmChainId } = req.query;
+  const chain = String(chainId || "");
+  const to = String(toAddress || "").trim();
+  const amt = parseFloat(String(amount || "0"));
+  const effectiveTokenId = tokenId ? String(tokenId) : (["tether", "usd-coin"].includes(chain) ? chain : null);
+  const effectiveEvmChain = (evmChainId as string) || "ethereum";
+
+  if (!chain || !to || !isFinite(amt) || amt <= 0) {
+    res.status(400).json({ message: "chainId, toAddress, and amount required" });
+    return;
+  }
+  if (!isEVMChain(chain) && !effectiveTokenId) {
+    res.json({ supported: false });
+    return;
+  }
+
+  try {
+    if (effectiveTokenId && ERC20_CONTRACTS[effectiveEvmChain]?.[effectiveTokenId]) {
+      const contract = ERC20_CONTRACTS[effectiveEvmChain][effectiveTokenId];
+      const est = await estimateGasForERC20(effectiveEvmChain, contract, to, String(amt));
+      const symbol = effectiveEvmChain === "ethereum" ? "ETH" : effectiveEvmChain === "binancecoin" ? "BNB" : effectiveEvmChain === "matic-network" ? "MATIC" : "AVAX";
+      res.json({ ...est, feeSymbol: symbol, supported: true });
+    } else if (isEVMChain(chain)) {
+      const amountWei = parseEther(String(amt));
+      const est = await estimateGasForNative(chain, to, amountWei);
+      const symbol = chain === "ethereum" ? "ETH" : chain === "binancecoin" ? "BNB" : chain === "matic-network" ? "MATIC" : "AVAX";
+      res.json({ ...est, feeSymbol: symbol, supported: true });
+    } else {
+      res.json({ supported: false });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Estimation failed";
+    res.status(400).json({ message: msg });
+  }
+});
+
 router.post("/send", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
@@ -135,6 +181,11 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
   const chain = CHAINS.find((c) => c.id === chainId) || SWAP_COINS.find((c) => c.id === chainId);
+  const validation = validateAddress(chainId, toAddress);
+  if (!validation.valid) {
+    res.status(400).json({ message: validation.error || "Invalid address" });
+    return;
+  }
   if (!chain) {
     res.status(400).json({ message: "Unsupported chain" });
     return;

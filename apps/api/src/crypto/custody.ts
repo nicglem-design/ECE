@@ -152,6 +152,51 @@ export async function getERC20Balance(
   return (Number(balance) / divisor).toFixed(6);
 }
 
+/** Estimate gas cost for native transfer (in ETH/BNB/etc). Returns { gasWei, gasPriceGwei, feeEth }. */
+export async function estimateGasForNative(
+  chainId: string,
+  toAddress: string,
+  amountWei: bigint
+): Promise<{ gasWei: string; gasPriceGwei: string; feeEth: string }> {
+  const rpc = EVM_CHAINS[chainId];
+  if (!rpc) throw new Error(`No RPC for chain ${chainId}`);
+  const provider = new JsonRpcProvider(rpc);
+  const feeData = await provider.getFeeData();
+  const gasPrice = feeData.gasPrice ?? BigInt(20e9);
+  const gasLimit = 21000n;
+  const feeWei = gasLimit * gasPrice;
+  return {
+    gasWei: gasLimit.toString(),
+    gasPriceGwei: (Number(gasPrice) / 1e9).toFixed(2),
+    feeEth: formatEther(feeWei),
+  };
+}
+
+/** Estimate gas cost for ERC20 transfer. Returns { gasWei, gasPriceGwei, feeEth }. */
+export async function estimateGasForERC20(
+  chainId: string,
+  tokenContract: string,
+  toAddress: string,
+  amountHuman: string,
+  decimals: number = 6
+): Promise<{ gasWei: string; gasPriceGwei: string; feeEth: string }> {
+  const rpc = EVM_CHAINS[chainId];
+  if (!rpc) throw new Error(`No RPC for chain ${chainId}`);
+  const provider = new JsonRpcProvider(rpc);
+  const { Contract, formatEther } = await import("ethers");
+  const contract = new Contract(tokenContract, ERC20_ABI, provider);
+  const amountWei = BigInt(Math.round(parseFloat(amountHuman) * 10 ** decimals));
+  const gasLimit = await contract.transfer.estimateGas(toAddress, amountWei);
+  const feeData = await provider.getFeeData();
+  const gasPrice = feeData.gasPrice ?? BigInt(20e9);
+  const feeWei = gasLimit * gasPrice;
+  return {
+    gasWei: gasLimit.toString(),
+    gasPriceGwei: (Number(gasPrice) / 1e9).toFixed(2),
+    feeEth: formatEther(feeWei),
+  };
+}
+
 /** Sign and broadcast ERC20 transfer. Returns tx hash. */
 export async function sendERC20(
   chainId: string,

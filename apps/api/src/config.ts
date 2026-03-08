@@ -15,6 +15,8 @@ export const config = {
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   stripeSuccessUrl: process.env.STRIPE_SUCCESS_URL || "http://localhost:3000/accounts?deposit=success",
   stripeCancelUrl: process.env.STRIPE_CANCEL_URL || "http://localhost:3000/accounts?deposit=cancelled",
+  stripeConnectReturnUrl: process.env.STRIPE_CONNECT_RETURN_URL || "http://localhost:3000/accounts?connect=success",
+  stripeConnectRefreshUrl: process.env.STRIPE_CONNECT_REFRESH_URL || "http://localhost:3000/accounts?connect=refresh",
   isProduction: isProd,
 };
 

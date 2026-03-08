@@ -99,6 +99,70 @@ router.post("/create-checkout", authMiddleware, async (req: Request, res: Respon
   }
 });
 
+/** POST /api/v1/accounts/connect-onboarding - Create Stripe Connect onboarding link for withdrawals */
+router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  if (!stripe) {
+    res.status(503).json({ message: "Stripe not configured. Set STRIPE_SECRET_KEY." });
+    return;
+  }
+  try {
+    const userRow = db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub) as { email: string } | undefined;
+    const email = userRow?.email || `user-${user.sub}@kanox.local`;
+    const profileRow = db.prepare(
+      "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
+    ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+
+    let accountId = profileRow?.stripe_connect_account_id;
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: email.toLowerCase(),
+        metadata: { userId: user.sub },
+      });
+      accountId = account.id;
+      const now = Date.now();
+      const updated = db.prepare(
+        "UPDATE profiles SET stripe_connect_account_id = ?, updated_at = ? WHERE user_id = ?"
+      ).run(accountId, now, user.sub);
+      if (updated.changes === 0) {
+        db.prepare(
+          "INSERT INTO profiles (user_id, display_name, avatar_url, theme, preferred_currency, stripe_connect_account_id, updated_at) VALUES (?, '', '', 'dark', 'usd', ?, ?)"
+        ).run(user.sub, accountId, now);
+      }
+    }
+
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: config.stripeConnectRefreshUrl,
+      return_url: config.stripeConnectReturnUrl,
+      type: "account_onboarding",
+    });
+    res.json({ url: link.url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Connect onboarding failed";
+    res.status(500).json({ message: msg });
+  }
+});
+
+/** GET /api/v1/accounts/connect-status - Check if Stripe Connect is linked */
+router.get("/connect-status", authMiddleware, (req: Request, res: Response) => {
+  const user = (req as Request & { user?: { sub: string } }).user;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const row = db.prepare(
+    "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
+  ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+  const linked = !!(row?.stripe_connect_account_id);
+  res.json({ linked });
+});
+
 /** POST /api/v1/accounts/deposit - Simulated fiat deposit (when Stripe not configured) */
 router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
@@ -202,6 +266,15 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
     if (linked) {
       destination = `${linked.label} ****${linked.last_four || ""}`;
       stripeAccountId = linked.stripe_account_id ?? null;
+    }
+  }
+  if (!stripeAccountId) {
+    const profile = db.prepare(
+      "SELECT stripe_connect_account_id FROM profiles WHERE user_id = ?"
+    ).get(user.sub) as { stripe_connect_account_id: string | null } | undefined;
+    if (profile?.stripe_connect_account_id) {
+      stripeAccountId = profile.stripe_connect_account_id;
+      destination = "Connected bank account";
     }
   }
 

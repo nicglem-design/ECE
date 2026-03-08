@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
@@ -10,13 +11,13 @@ import {
   useLinkedAccounts,
   type LinkedAccount,
 } from "@/hooks/useFiatAccounts";
-import { apiPost } from "@/lib/apiClient";
+import { apiPost, apiGet } from "@/lib/apiClient";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const FIAT_CURRENCIES = ["USD", "EUR", "GBP", "SEK"];
 const QUICK_AMOUNTS = [50, 100, 250, 500, 1000, 2500];
 
-export default function AccountsPage() {
+function AccountsContent() {
   const { t } = useLanguage();
   const { balances, loading, refetch } = useFiatBalances();
   const { accounts, addAccount, removeAccount } = useLinkedAccounts();
@@ -37,6 +38,26 @@ export default function AccountsPage() {
   const [addLastFour, setAddLastFour] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [connectLinked, setConnectLinked] = useState<boolean | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    apiGet<{ linked: boolean }>("/api/v1/accounts/connect-status")
+      .then((d) => setConnectLinked(d.linked))
+      .catch(() => setConnectLinked(false));
+  }, [searchParams?.get("connect")]);
+
+  const handleConnectBank = async () => {
+    setConnectLoading(true);
+    try {
+      const data = await apiPost<{ url?: string }>("/api/v1/accounts/connect-onboarding", {});
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setConnectLoading(false);
+    }
+    setConnectLoading(false);
+  };
 
   const handlePayWithCard = async () => {
     const amt = parseFloat(depositAmount);
@@ -314,13 +335,28 @@ export default function AccountsPage() {
                   onChange={(e) => setWithdrawAccount(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-slate-200"
                 >
-                  <option value="">External account</option>
+                  <option value="">
+                    {connectLinked ? "Connected bank account" : "External account"}
+                  </option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label} {a.last_four ? `****${a.last_four}` : ""}
                     </option>
                   ))}
                 </select>
+                {connectLinked === false && (
+                  <button
+                    type="button"
+                    onClick={handleConnectBank}
+                    disabled={connectLoading}
+                    className="mt-2 text-sm text-sky-400 hover:text-sky-300"
+                  >
+                    {connectLoading ? "Connecting..." : "Connect bank for real withdrawals"}
+                  </button>
+                )}
+                {connectLinked && (
+                  <p className="mt-1 text-xs text-green-500">Bank connected via Stripe</p>
+                )}
               </div>
               <button
                 onClick={handleWithdraw}
@@ -454,5 +490,17 @@ export default function AccountsPage() {
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+export default function AccountsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-theme">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+      </div>
+    }>
+      <AccountsContent />
+    </Suspense>
   );
 }

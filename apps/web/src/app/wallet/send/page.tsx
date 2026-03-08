@@ -12,7 +12,7 @@ import { CurrencyCombobox } from "@/components/CurrencyCombobox";
 import { FiatCurrencyCombobox } from "@/components/FiatCurrencyCombobox";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { getPrice } from "@/lib/coingecko";
-import { apiPost } from "@/lib/apiClient";
+import { apiPost, apiGet } from "@/lib/apiClient";
 
 function SendPageContent() {
   const { t } = useLanguage();
@@ -33,11 +33,67 @@ function SendPageContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ txHash?: string } | null>(null);
 
-  const chainOptions = chains.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
+  const TOKEN_OPTIONS = [
+    { id: "tether", name: "Tether", symbol: "USDT" },
+    { id: "usd-coin", name: "USD Coin", symbol: "USDC" },
+  ];
+  const chainOptions = [
+    ...chains.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol })),
+    ...TOKEN_OPTIONS,
+  ];
+  const evmChainsForTokens = chains.filter(
+    (c) => ["ethereum", "binancecoin", "matic-network", "avalanche-2"].includes(c.id)
+  );
+  const isERC20Token = chainId === "tether" || chainId === "usd-coin";
+
+  const [evmChainId, setEvmChainId] = useState("ethereum");
+  const [gasEstimate, setGasEstimate] = useState<{
+    feeEth: string;
+    feeSymbol: string;
+    gasPriceGwei: string;
+  } | null>(null);
+
+  const isEVM = ["ethereum", "binancecoin", "matic-network", "avalanche-2"].includes(chainId);
+  const showGasEstimate =
+    (isEVM || isERC20Token) &&
+    toAddress.trim().length >= 10 &&
+    amountCrypto &&
+    parseFloat(amountCrypto) > 0;
+
+  useEffect(() => {
+    if (!showGasEstimate) {
+      setGasEstimate(null);
+      return;
+    }
+    const params = new URLSearchParams({
+      chainId,
+      toAddress: toAddress.trim(),
+      amount: amountCrypto,
+    });
+    if (isERC20Token) {
+      params.set("tokenId", chainId);
+      params.set("evmChainId", evmChainId);
+    }
+    apiGet<{ feeEth?: string; feeSymbol?: string; gasPriceGwei?: string; supported?: boolean }>(
+      `/api/v1/wallet/estimate-gas?${params}`
+    )
+      .then((data) => {
+        if (data.supported && data.feeEth && data.feeSymbol) {
+          setGasEstimate({
+            feeEth: data.feeEth,
+            feeSymbol: data.feeSymbol,
+            gasPriceGwei: data.gasPriceGwei || "",
+          });
+        } else {
+          setGasEstimate(null);
+        }
+      })
+      .catch(() => setGasEstimate(null));
+  }, [showGasEstimate, chainId, evmChainId, toAddress, amountCrypto, isERC20Token]);
 
   useEffect(() => {
     const urlChain = searchParams.get("chain") ?? "";
-    if (urlChain && chains.some((c) => c.id === urlChain)) {
+    if (urlChain && chainOptions.some((c) => c.id === urlChain)) {
       setChainId(urlChain);
     } else if (chains.length > 0 && !chainId) {
       setChainId(chains[0].id);
@@ -74,11 +130,16 @@ function SendPageContent() {
     }
     setSending(true);
     try {
-      const res = await apiPost<{ success: boolean; txHash?: string }>("/api/v1/wallet/send", {
+      const body: Record<string, string> = {
         chainId,
         toAddress: toAddress.trim(),
         amount: amt,
-      });
+      };
+      if (isERC20Token) {
+        body.tokenId = chainId;
+        body.evmChainId = evmChainId;
+      }
+      const res = await apiPost<{ success: boolean; txHash?: string }>("/api/v1/wallet/send", body);
       setSuccess(res);
       setAmountCrypto("");
       setAmountFiat("");
@@ -134,6 +195,24 @@ function SendPageContent() {
                   <p className="mt-1 text-sm text-slate-500">
                     {t("portfolio.currentValue")}: {selectedAsset.amount} {selectedAsset.symbol}
                   </p>
+                )}
+                {isERC20Token && (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-slate-400">
+                      {t("send.network") || "Network"}
+                    </label>
+                    <select
+                      value={evmChainId}
+                      onChange={(e) => setEvmChainId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-slate-200 focus:border-sky-500 focus:outline-none"
+                    >
+                      {evmChainsForTokens.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
               <div>
@@ -195,6 +274,13 @@ function SendPageContent() {
                   placeholder={t("send.placeholder")}
                   className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 font-mono text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
                 />
+                {gasEstimate && (
+                  <p className="mt-2 text-sm text-amber-400/90">
+                    {t("send.estimatedFee") || "Estimated fee"}: ~{parseFloat(gasEstimate.feeEth).toFixed(6)}{" "}
+                    {gasEstimate.feeSymbol}
+                    {gasEstimate.gasPriceGwei && ` (${gasEstimate.gasPriceGwei} gwei)`}
+                  </p>
+                )}
               </div>
               {error && <p className="text-red-400">{error}</p>}
               {success && (
