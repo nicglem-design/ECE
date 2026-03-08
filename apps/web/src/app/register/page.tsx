@@ -15,6 +15,7 @@ export default function RegisterPage() {
   const [birthDate, setBirthDate] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,8 +40,14 @@ export default function RegisterPage() {
     const result = await signup(email, password, birthDate);
     setLoading(false);
     if (result.ok) {
-      router.push("/dashboard");
-      router.refresh();
+      setError("");
+      setLoading(false);
+      setSuccess(t("auth.checkEmailVerify") || "Account created! Check your email to verify your account.");
+      setTimeout(() => {
+        router.push("/dashboard");
+        router.refresh();
+      }, 3000);
+      return;
     } else {
       setError(result.error || t("auth.connectError"));
     }
@@ -98,6 +105,9 @@ export default function RegisterPage() {
               </Link>
             </span>
           </label>
+          {success && (
+            <p className="text-sm text-green-400">{success}</p>
+          )}
           {error && (
             <p className="text-sm text-red-400">{error}</p>
           )}

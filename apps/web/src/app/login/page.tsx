@@ -51,6 +51,11 @@ export default function LoginPage() {
             required
             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
           />
+          <p className="text-right">
+            <Link href="/forgot-password" className="text-sm text-sky-400 hover:underline">
+              {t("auth.forgotPassword") || "Forgot password?"}
+            </Link>
+          </p>
           {error && (
             <p className="text-sm text-red-400">{error}</p>
           )}
