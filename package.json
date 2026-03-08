@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "dev": "ulimit -n 65536 2>/dev/null || true; npm-run-all --parallel dev:web dev:api",
-    "dev:web": "cd apps/web && npx next dev --hostname 127.0.0.1 --webpack",
-    "dev:api": "cd apps/api && node dist/main.js",
+    "dev:web": "ulimit -n 65536 2>/dev/null || true; cd apps/web && npx next dev --hostname 127.0.0.1 --webpack",
+    "dev:api": "cd apps/api && npm run build && node dist/main.js",
     "dev:web-only": "ulimit -n 65536 2>/dev/null || true; cd apps/web && npx next dev --hostname 127.0.0.1 --webpack",
     "dev:web-alt": "cd apps/web && npx next dev --hostname 127.0.0.1 -p 3002 --webpack",
     "start": "npm-run-all --parallel start:web start:api",

@@ -92,7 +92,7 @@ function SendPageContent() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <header className="border-b border-slate-800/50">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <KanoXLogo label={t("nav.kanox")} variant="sky" size="md" />
@@ -221,7 +221,7 @@ function SendPageContent() {
 export default function SendPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-theme">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
       </div>
     }>

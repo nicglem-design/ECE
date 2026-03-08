@@ -15,7 +15,7 @@ const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get("query") || "").trim().toLowerCase();
-  if (query.length < 2) {
+  if (query.length < 1) {
     return NextResponse.json({ coins: [] });
   }
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const data = (await res.json()) as {
       coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number; thumb?: string; large?: string; item?: { id?: string; name?: string; symbol?: string; market_cap_rank?: number; thumb?: string; large?: string } }>;
     };
-    const raw = (data.coins ?? []).slice(0, 10);
+    const raw = (data.coins ?? []).slice(0, 50);
     const coins = raw.map((c) => {
       const item = c.item ?? c;
       return {

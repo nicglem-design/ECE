@@ -73,7 +73,7 @@ export default function WalletPage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <WalletNav />
         <div className="mx-auto max-w-6xl px-6 py-8">
           {!riskDisclaimerDismissed && (

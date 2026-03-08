@@ -19,6 +19,11 @@ const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
   { value: "blue", label: "Blue" },
   { value: "amber", label: "Amber" },
+  { value: "green", label: "Green" },
+  { value: "purple", label: "Purple" },
+  { value: "rose", label: "Rose" },
+  { value: "emerald", label: "Emerald" },
+  { value: "cyan", label: "Cyan" },
 ];
 
 export default function ProfilePage() {
@@ -75,7 +80,7 @@ export default function ProfilePage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme text-theme">
         <header className="border-b border-slate-800/50">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <KanoXLogo label={t("nav.kanox")} variant="sky" size="md" />
@@ -108,27 +113,49 @@ export default function ProfilePage() {
                 <label className="block text-sm font-medium text-slate-300">{t("profile.picture")}</label>
                 <p className="mt-1 text-sm text-slate-500">{t("profile.pictureDesc")}</p>
                 <div className="mt-2 flex items-center gap-4">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt="Profile"
-                      className="h-16 w-16 rounded-full object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-700 text-2xl text-slate-400">
-                      {displayName?.[0]?.toUpperCase() || profile.email[0]?.toUpperCase() || "?"}
-                    </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="avatar-file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && file.type.startsWith("image/")) {
+                        const reader = new FileReader();
+                        reader.onload = () => setAvatarUrl(reader.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById("avatar-file")?.click()}
+                    className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-700 text-2xl text-slate-400 ring-2 ring-transparent transition hover:ring-sky-500/50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt="Profile"
+                        className="h-full w-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      displayName?.[0]?.toUpperCase() || profile.email[0]?.toUpperCase() || "?"
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-slate-900/60 opacity-0 transition group-hover:opacity-100">
+                      <span className="text-xs font-medium text-white">{t("profile.chooseImage")}</span>
+                    </span>
+                  </button>
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setAvatarUrl("")}
+                      className="text-sm text-slate-400 hover:text-red-400"
+                    >
+                      {t("profile.removePicture")}
+                    </button>
                   )}
-                  <div className="flex-1">
-                    <input
-                      type="url"
-                      value={avatarUrl}
-                      onChange={(e) => setAvatarUrl(e.target.value)}
-                      placeholder="https://..."
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-                    />
-                  </div>
                 </div>
               </div>
               <div>
@@ -177,11 +204,14 @@ export default function ProfilePage() {
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setTheme(opt.value)}
+                      onClick={() => {
+                        setTheme(opt.value);
+                        applyTheme(opt.value);
+                      }}
                       className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                         theme === opt.value
-                          ? "bg-sky-500 text-white"
-                          : "border border-slate-600 text-slate-400 hover:border-sky-500/50"
+                          ? "bg-theme-accent text-white"
+                          : "border border-theme text-theme-muted hover:border-theme-accent"
                       }`}
                     >
                       {opt.label}

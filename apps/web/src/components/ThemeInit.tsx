@@ -4,13 +4,15 @@ import { useEffect } from "react";
 
 const THEME_KEY = "kanox_theme";
 
+const VALID_THEMES = ["light", "dark", "blue", "amber", "green", "purple", "rose", "emerald", "cyan"];
+
 function getEffectiveTheme(stored: string | null): string {
   if (!stored || stored === "system") {
     return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches
       ? "light"
       : "dark";
   }
-  return ["light", "dark", "blue", "amber"].includes(stored) ? stored : "dark";
+  return VALID_THEMES.includes(stored) ? stored : "dark";
 }
 
 export function applyTheme(theme: string) {

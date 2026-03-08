@@ -7,7 +7,7 @@ export default function TermsPage() {
   const { t } = useLanguage();
 
   return (
-    <main className="min-h-screen bg-slate-950">
+    <main className="min-h-screen bg-theme">
       <div className="mx-auto max-w-3xl px-6 py-12">
         <Link href="/" className="text-sm text-sky-400 hover:underline">
           {t("nav.backTo")}

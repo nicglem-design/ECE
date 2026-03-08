@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { KanoXLogo } from "@/components/KanoXLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CryptoListWidget } from "@/components/CryptoListWidget";
 import { PopularCryptoWidget } from "@/components/PopularCryptoWidget";
+import { SwapWidget } from "@/components/SwapWidget";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
 
-export default function ExchangePage() {
+function ExchangeContent() {
   const { t } = useLanguage();
+  const searchParams = useSearchParams();
+  const buyCoinId = searchParams.get("buy");
   const [riskDisclaimerDismissed, setRiskDisclaimerDismissed] = useState(false);
 
   useEffect(() => {
@@ -28,7 +31,7 @@ export default function ExchangePage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <header className="border-b border-slate-800/50">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <KanoXLogo label={t("nav.kanox")} variant="amber" size="md" />
@@ -94,16 +97,13 @@ export default function ExchangePage() {
               <PopularCryptoWidget />
             </div>
             <div className="rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
-              <h2 className="text-lg font-semibold text-slate-200">Swap (coming soon)</h2>
-              <p className="mt-3 text-slate-400">
-                KanoExchange swap is under development. You can send and receive crypto in KanoWallet today.
+              <h2 className="text-lg font-semibold text-slate-200">Swap</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Swap any cryptocurrency using live market prices.
               </p>
-              <Link
-                href="/wallet"
-                className="mt-6 inline-block rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
-              >
-                Open KanoWallet →
-              </Link>
+              <div className="mt-6">
+                <SwapWidget initialBuyCoinId={buyCoinId || undefined} />
+              </div>
             </div>
           </div>
           <Link href="/" className="mt-6 inline-block text-sky-400 hover:underline">
@@ -112,5 +112,17 @@ export default function ExchangePage() {
         </div>
       </main>
     </ProtectedRoute>
+  );
+}
+
+export default function ExchangePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-theme">
+        <span className="text-slate-400">Loading...</span>
+      </div>
+    }>
+      <ExchangeContent />
+    </Suspense>
   );
 }

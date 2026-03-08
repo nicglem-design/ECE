@@ -160,7 +160,7 @@ export default function CryptoDetailPage() {
 
   return (
     <ProtectedRoute>
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
+    <div className="fixed inset-0 z-50 flex flex-col bg-theme">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-800/50 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
           <button

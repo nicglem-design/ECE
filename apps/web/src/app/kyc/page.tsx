@@ -64,7 +64,7 @@ export default function KycPage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <div className="mx-auto max-w-2xl px-6 py-12">
           <h1 className="text-2xl font-bold text-slate-200">{t("kyc.title")}</h1>
           <p className="mt-2 text-slate-400">{t("kyc.instructions")}</p>

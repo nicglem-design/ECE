@@ -129,7 +129,7 @@ export default function PortfolioPage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <WalletNav />
         <div className="mx-auto max-w-4xl px-6 py-8">
           <h1 className="text-2xl font-bold text-slate-200">{t("portfolio.title")}</h1>

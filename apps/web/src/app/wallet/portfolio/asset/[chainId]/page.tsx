@@ -169,7 +169,7 @@ export default function AssetPortfolioChartPage() {
   if (!chainId) {
     return (
       <ProtectedRoute>
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-400">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-theme text-slate-400">
           <p>Invalid asset</p>
           <Link href="/wallet/portfolio" className="text-sky-400 hover:underline">
             Back to portfolio
@@ -182,7 +182,7 @@ export default function AssetPortfolioChartPage() {
   if (assetsLoading) {
     return (
       <ProtectedRoute>
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-theme">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
           <p className="text-slate-400">{(isPro ? t("portfolio.loadingAssets") : t("portfolio.loadingCoins")) || "Loading..."}</p>
         </div>
@@ -193,7 +193,7 @@ export default function AssetPortfolioChartPage() {
   if (!assetsLoading && assets.length > 0 && !asset) {
     return (
       <ProtectedRoute>
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-400">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-theme text-slate-400">
           <p>{isPro ? t("portfolio.assetNotFound") : t("portfolio.coinNotFound")}</p>
           <Link href="/wallet/portfolio" className="text-sky-400 hover:underline">
             {t("portfolio.backToPortfolio") || "Back to portfolio"}
@@ -206,7 +206,7 @@ export default function AssetPortfolioChartPage() {
   if (!assetsLoading && assets.length === 0) {
     return (
       <ProtectedRoute>
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 text-slate-400">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-theme text-slate-400">
           <p>{isPro ? t("portfolio.noAssets") : t("portfolio.noCoins")}</p>
           <Link href="/wallet/portfolio" className="text-sky-400 hover:underline">
             {t("portfolio.backToPortfolio") || "Back to portfolio"}
@@ -218,7 +218,7 @@ export default function AssetPortfolioChartPage() {
 
   return (
     <ProtectedRoute>
-      <div className="fixed inset-0 z-50 flex flex-col bg-slate-950">
+      <div className="fixed inset-0 z-50 flex flex-col bg-theme">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-800/50 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             <Link

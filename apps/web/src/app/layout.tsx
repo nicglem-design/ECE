@@ -31,7 +31,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-slate-950">
+      <body className="min-h-screen bg-theme text-theme">
         <AppErrorBoundary>
         <ThemeInit />
         <LanguageProvider>

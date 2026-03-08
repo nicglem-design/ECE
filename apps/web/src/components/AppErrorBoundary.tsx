@@ -28,7 +28,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-8 text-slate-200">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-theme p-8 text-slate-200">
           <h1 className="text-xl font-bold text-red-400">Something went wrong</h1>
           <p className="mt-4 max-w-md text-center text-slate-400">
             {this.state.error?.message ?? "An unexpected error occurred."}

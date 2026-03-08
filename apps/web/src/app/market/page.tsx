@@ -185,7 +185,7 @@ export default function MarketPage() {
 
   return (
     <ProtectedRoute>
-      <main className="min-h-screen bg-slate-950">
+      <main className="min-h-screen bg-theme">
         <header className="border-b border-slate-800/50">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <KanoXLogo label={t("nav.kanox")} variant="amber" size="md" />

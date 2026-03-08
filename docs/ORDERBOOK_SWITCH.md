@@ -24,9 +24,20 @@ When your app has users trading, prices will automatically come from your own or
 
 ## When You Launch Trading
 
-1. **Wire the Swap UI** – Call `POST /api/market/orders` when users place orders (with `userId` from auth).
-2. **Add persistence** – Replace in-memory storage in `engine.ts` with DB/Redis for production.
-3. **No price changes** – The price flow already prefers your order book when it has data.
+1. **Enable real swap execution** – Set `SWAP_REAL_MONEY=true` in your env. The swap UI will then execute via the order book instead of simulating.
+2. **Wire the Swap UI** – Call `POST /api/market/orders` when users place orders (with `userId` from auth).
+3. **Add persistence** – Replace in-memory storage in `engine.ts` with DB/Redis for production.
+4. **No price changes** – The price flow already prefers your order book when it has data.
+
+### Real-money swap mode
+
+When `SWAP_REAL_MONEY=true`:
+
+- **USDT → crypto** (e.g. USDT → BTC): Places a buy order on the order book; market maker provides liquidity for instant fill.
+- **Crypto → USDT** (e.g. SOL → USDT): Places a sell order; market maker provides liquidity.
+- **Crypto → crypto** (e.g. SOL → BTC): Executes two orders (sell SOL for USDT, buy BTC with USDT).
+
+Supported pairs: BTC, ETH, BNB, SOL, DOGE, PEPE, BONK, SHIB (vs USDT). Other pairs fall back to simulated or return an error.
 
 ## To Force Own Prices Only (Optional)
 
