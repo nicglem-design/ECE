@@ -8,6 +8,7 @@ import Stripe from "stripe";
 import { db } from "../db";
 import { config } from "../config";
 import { requireKycApproved } from "../lib/kyc";
+import { requireEmailVerified } from "../lib/emailVerify";
 
 const SUPPORTED_FIAT = ["USD", "EUR", "GBP", "SEK"];
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
@@ -48,8 +49,9 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     const currency = (session.metadata?.currency || "USD").toUpperCase();
     if (userId && amount > 0 && SUPPORTED_FIAT.includes(currency)) {
       const kycCheck = await requireKycApproved(userId);
-      if (!kycCheck.ok) {
-        console.warn(`Stripe webhook: KYC not approved for user ${userId}, refunding payment ${session.payment_intent || session.id}`);
+      const emailCheck = await requireEmailVerified(userId);
+      if (!kycCheck.ok || !emailCheck.ok) {
+        console.warn(`Stripe webhook: KYC or email not verified for user ${userId}, refunding payment ${session.payment_intent || session.id}`);
         const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent as Stripe.PaymentIntent)?.id;
         if (paymentIntentId) {
           try {

@@ -9,6 +9,7 @@ import { WalletNav } from "@/components/WalletNav";
 import {
   useFiatBalances,
   useLinkedAccounts,
+  useFiatTransactions,
   type LinkedAccount,
 } from "@/hooks/useFiatAccounts";
 import { apiPost, apiGet } from "@/lib/apiClient";
@@ -28,10 +29,13 @@ function AccountsContent() {
   const { t } = useLanguage();
   const { balances, loading, refetch } = useFiatBalances();
   const { accounts, addAccount, removeAccount, refetch: refetchLinked } = useLinkedAccounts();
+  const { transactions, loading: txLoading, refetch: refetchTx } = useFiatTransactions();
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [kycStatus, setKycStatus] = useState<string | null>(null);
   const [kycRequired, setKycRequired] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(true);
+  const [emailRequired, setEmailRequired] = useState(false);
   const [depositCurrency, setDepositCurrency] = useState("USD");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
@@ -51,6 +55,8 @@ function AccountsContent() {
   const [addLastFour, setAddLastFour] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [resendEmailLoading, setResendEmailLoading] = useState(false);
+  const [resendEmailSent, setResendEmailSent] = useState(false);
 
   const fetchConnectStatus = async () => {
     try {
@@ -64,8 +70,11 @@ function AccountsContent() {
 
   const fetchKycStatus = async () => {
     try {
-      const data = await apiGet<{ kycStatus: string }>("/api/v1/kyc/status");
+      const data = await apiGet<{ kycStatus: string; kycRequired?: boolean; emailVerified?: boolean; emailRequired?: boolean }>("/api/v1/kyc/status");
       setKycStatus(data.kycStatus);
+      setKycRequired(data.kycRequired ?? false);
+      setEmailVerified(data.emailVerified ?? true);
+      setEmailRequired(data.emailRequired ?? false);
     } catch {
       setKycStatus("pending");
     }
@@ -78,10 +87,15 @@ function AccountsContent() {
 
   useEffect(() => {
     const connect = searchParams.get("connect");
+    const deposit = searchParams.get("deposit");
     if (connect === "success" || connect === "refresh") {
       fetchConnectStatus();
     }
-  }, [searchParams]);
+    if (deposit === "success") {
+      refetch();
+      refetchTx();
+    }
+  }, [searchParams, refetch, refetchTx]);
 
   const handleConnectBank = async () => {
     setConnectLoading(true);
@@ -150,6 +164,7 @@ function AccountsContent() {
       setDepositSuccess(`Added ${amt.toLocaleString()} ${depositCurrency}`);
       setDepositAmount("");
       refetch();
+      refetchTx();
       setTimeout(() => setDepositSuccess(null), 4000);
     } catch (err) {
       setDepositError(err instanceof Error ? err.message : "Deposit failed");
@@ -191,6 +206,7 @@ function AccountsContent() {
       setWithdrawTotpCode("");
       setShowWithdraw2FA(false);
       refetch();
+      refetchTx();
       setTimeout(() => setWithdrawSuccess(null), 4000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Withdrawal failed";
@@ -223,6 +239,20 @@ function AccountsContent() {
     await removeAccount(acc.id);
   };
 
+  const handleResendVerification = async () => {
+    setResendEmailLoading(true);
+    setResendEmailSent(false);
+    try {
+      await apiPost<{ success: boolean; message?: string }>("/api/v1/auth/resend-verification", {});
+      setResendEmailSent(true);
+      setTimeout(() => setResendEmailSent(false), 5000);
+    } catch {
+      // ignore
+    } finally {
+      setResendEmailLoading(false);
+    }
+  };
+
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-theme">
@@ -233,6 +263,21 @@ function AccountsContent() {
             Deposit money to buy crypto, or withdraw to your bank or card.
           </p>
 
+          {emailRequired && !emailVerified && (
+            <div className="mt-6 rounded-xl border border-amber-600/50 bg-amber-900/20 p-4">
+              <p className="text-amber-200">
+                Verify your email to deposit or withdraw funds. Check your inbox for the verification link.
+              </p>
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendEmailLoading}
+                className="mt-2 text-sm font-medium text-amber-400 hover:text-amber-300 hover:underline disabled:opacity-50"
+              >
+                {resendEmailSent ? "Email sent! Check your inbox." : resendEmailLoading ? "Sending..." : "Resend verification email →"}
+              </button>
+            </div>
+          )}
           {kycRequired && kycStatus && kycStatus !== "approved" && (
             <div className={`mt-6 rounded-xl border p-4 ${
               kycStatus === "rejected"
@@ -482,6 +527,57 @@ function AccountsContent() {
                 >
                   {connectLoading ? "Connecting..." : "Connect bank"}
                 </button>
+              </div>
+            )}
+          </div>
+
+          {/* Transaction history */}
+          <div className="mt-6 rounded-xl border border-slate-600 bg-slate-800/40 p-4">
+            <h2 className="text-lg font-semibold text-slate-200">Transaction history</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Recent deposits and withdrawals.
+            </p>
+            {txLoading ? (
+              <p className="mt-3 text-slate-500">Loading...</p>
+            ) : transactions.length === 0 ? (
+              <p className="mt-3 text-slate-500">No transactions yet.</p>
+            ) : (
+              <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+                {transactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between rounded-lg bg-slate-700/30 px-4 py-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`text-sm font-medium ${
+                          tx.type === "deposit" ? "text-green-400" : "text-amber-400"
+                        }`}
+                      >
+                        {tx.type === "deposit" ? "+" : "−"}
+                      </span>
+                      <div>
+                        <span className="font-medium text-slate-200 capitalize">{tx.type}</span>
+                        <span className="ml-2 text-sm text-slate-500">
+                          {tx.method ? ` · ${tx.method}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-slate-300">
+                        {tx.type === "deposit" ? "+" : "−"}
+                        {getCurrencySymbol(tx.currency.toLowerCase())}
+                        {tx.amount.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        {new Date(tx.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

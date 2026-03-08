@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { logAudit } from "../lib/audit";
 import { checkWithdrawalLimit } from "../lib/limits";
 import { requireKycApproved } from "../lib/kyc";
+import { requireEmailVerified } from "../lib/emailVerify";
 import { increment } from "../lib/metrics";
 
 const router = Router();
@@ -50,6 +51,16 @@ router.post("/connect-onboarding", authMiddleware, async (req: Request, res: Res
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  const kycCheck = await requireKycApproved(user.sub);
+  if (!kycCheck.ok) {
+    res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
+    return;
+  }
+  const emailCheck = await requireEmailVerified(user.sub);
+  if (!emailCheck.ok) {
+    res.status(403).json({ message: emailCheck.message, code: emailCheck.code });
     return;
   }
   if (!stripe) {
@@ -223,6 +234,11 @@ router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
     res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
     return;
   }
+  const emailCheck = await requireEmailVerified(user.sub);
+  if (!emailCheck.ok) {
+    res.status(403).json({ message: emailCheck.message, code: emailCheck.code });
+    return;
+  }
   const { currency, amount, method } = req.body;
   const curr = (currency || "USD").toUpperCase();
   if (!SUPPORTED_FIAT.includes(curr)) {
@@ -257,6 +273,11 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
   const kycCheck = await requireKycApproved(user.sub);
   if (!kycCheck.ok) {
     res.status(403).json({ message: kycCheck.message, code: kycCheck.code });
+    return;
+  }
+  const emailCheck = await requireEmailVerified(user.sub);
+  if (!emailCheck.ok) {
+    res.status(403).json({ message: emailCheck.message, code: emailCheck.code });
     return;
   }
   const { currency, amount, linkedAccountId, totpCode } = req.body;

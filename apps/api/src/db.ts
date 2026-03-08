@@ -270,6 +270,11 @@ if (connectionString) {
       } catch {
         /* column may exist */
       }
+      try {
+        await db.exec("ALTER TABLE users ADD COLUMN tos_accepted_at BIGINT");
+      } catch {
+        /* column may exist */
+      }
     } catch (err) {
       console.error("Supabase schema init error:", err);
     }
@@ -468,6 +473,11 @@ if (connectionString) {
     }
     try {
       database.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+    } catch {
+      /* column may exist */
+    }
+    try {
+      database.exec("ALTER TABLE users ADD COLUMN tos_accepted_at INTEGER");
     } catch {
       /* column may exist */
     }

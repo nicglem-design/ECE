@@ -37,7 +37,7 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
-    const result = await signup(email, password, birthDate);
+    const result = await signup(email, password, birthDate, acceptedTerms);
     setLoading(false);
     if (result.ok) {
       setError("");

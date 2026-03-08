@@ -79,7 +79,8 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-slate-200">8. Contact</h2>
             <p className="mt-2">
-              For questions about these terms, please contact us through the channels provided on our website.
+              For questions about these terms, please{" "}
+              <Link href="/support" className="text-sky-400 hover:underline">contact our support team</Link>.
             </p>
           </section>
         </div>

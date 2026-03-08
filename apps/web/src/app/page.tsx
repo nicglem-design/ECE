@@ -143,6 +143,8 @@ export default function HomePage() {
             <Link href="/terms" className="text-sky-400 hover:underline">{t("legal.terms")}</Link>
             {" · "}
             <Link href="/privacy" className="text-sky-400 hover:underline">{t("legal.privacy")}</Link>
+            {" · "}
+            <Link href="/support" className="text-sky-400 hover:underline">Support</Link>
           </span>
         </div>
       </footer>

@@ -6,6 +6,7 @@ import { db } from "../db";
 import { config } from "../config";
 import { v4 as uuidv4 } from "uuid";
 import { validateBody } from "../middleware/validate";
+import { authMiddleware } from "../middleware/auth";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/email";
 import { logAudit } from "../lib/audit";
 
@@ -24,6 +25,7 @@ const signupSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(8, "Password must be at least 8 characters").max(500),
   birthDate: z.string().optional(),
+  acceptedTerms: z.boolean().optional(),
 });
 
 const forgotPasswordSchema = z.object({
@@ -59,14 +61,15 @@ router.post("/login", validateBody(loginSchema), async (req: Request, res: Respo
 
 router.post("/signup", validateBody(signupSchema), async (req: Request, res: Response) => {
   try {
-    const { email, password, birthDate } = req.body;
+    const { email, password, birthDate, acceptedTerms } = req.body;
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
     const now = Date.now();
+    const tosAcceptedAt = acceptedTerms === true ? now : null;
     try {
       await db.prepare(
-        "INSERT INTO users (id, email, password_hash, email_verified, created_at) VALUES (?, ?, ?, 0, ?)"
-      ).run(id, email.toLowerCase(), passwordHash, now);
+        "INSERT INTO users (id, email, password_hash, email_verified, created_at, tos_accepted_at) VALUES (?, ?, ?, 0, ?, ?)"
+      ).run(id, email.toLowerCase(), passwordHash, now, tosAcceptedAt);
       await db.prepare(
         "INSERT INTO profiles (user_id, display_name, updated_at) VALUES (?, ?, ?)"
       ).run(id, "", now);
@@ -122,6 +125,37 @@ router.post("/verify-email", validateBody(verifyEmailSchema), async (req: Reques
   } catch (err) {
     console.error("Verify email error:", err);
     res.status(500).json({ message: "Verification failed" });
+  }
+});
+
+router.post("/resend-verification", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const user = (req as Request & { user?: { sub: string } }).user;
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const row = (await db.prepare("SELECT email, email_verified FROM users WHERE id = ?").get(user.sub)) as { email: string; email_verified: number } | undefined;
+    if (!row) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+    if (row.email_verified === 1) {
+      res.json({ success: true, message: "Email already verified" });
+      return;
+    }
+    const verifyToken = uuidv4();
+    const now = Date.now();
+    const verifyExpires = now + 24 * 60 * 60 * 1000;
+    await db.prepare("DELETE FROM auth_tokens WHERE user_id = ? AND type = 'email_verify'").run(user.sub);
+    await db.prepare(
+      "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'email_verify', ?, ?)"
+    ).run(uuidv4(), user.sub, verifyToken, verifyExpires, now);
+    await sendVerificationEmail(row.email, verifyToken);
+    res.json({ success: true, message: "Verification email sent. Check your inbox." });
+  } catch (err) {
+    console.error("Resend verification error:", err);
+    res.status(500).json({ message: "Failed to send verification email" });
   }
 });
 

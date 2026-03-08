@@ -174,7 +174,7 @@ async function executeWalletSwap(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fromCoinId, toCoinId, fromAmount, userId } = body;
+    const { fromCoinId, toCoinId, fromAmount, userId, minAmountOut } = body;
     const authHeader = request.headers.get("authorization");
 
     if (!fromCoinId || !toCoinId || !fromAmount || fromAmount <= 0) {
@@ -203,6 +203,14 @@ export async function POST(request: NextRequest) {
     const feeUsd = valueUsd * feeBps;
     const netUsd = valueUsd - feeUsd;
     const toAmount = netUsd / toPrice;
+
+    const minOut = typeof minAmountOut === "number" && minAmountOut > 0 ? minAmountOut : null;
+    if (minOut != null && toAmount < minOut) {
+      return NextResponse.json(
+        { error: "Price moved. You would receive less than your minimum. Try again." },
+        { status: 400 }
+      );
+    }
 
     const useRealMoney = process.env.SWAP_REAL_MONEY === "true" || process.env.SWAP_REAL_MONEY === "1";
 

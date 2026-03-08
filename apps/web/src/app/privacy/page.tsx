@@ -82,7 +82,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-slate-200">8. Contact</h2>
             <p className="mt-2">
-              For privacy-related questions or to exercise your rights, please contact us through the channels provided on our website.
+              For privacy-related questions or to exercise your rights, please{" "}
+              <Link href="/support" className="text-sky-400 hover:underline">contact our support team</Link>.
             </p>
           </section>
         </div>

@@ -18,7 +18,7 @@ interface AuthContextValue {
   email: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  signup: (email: string, password: string, birthDate: string) => Promise<{ ok: boolean; error?: string }>;
+  signup: (email: string, password: string, birthDate: string, acceptedTerms?: boolean) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -76,12 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signup = useCallback(async (email: string, password: string, birthDate: string) => {
+  const signup = useCallback(async (email: string, password: string, birthDate: string, acceptedTerms = true) => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, birthDate }),
+        body: JSON.stringify({ email, password, birthDate, acceptedTerms }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

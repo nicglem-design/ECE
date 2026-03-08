@@ -184,6 +184,7 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
   const [swapping, setSwapping] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [slippageBps, setSlippageBps] = useState(100); // 1% default
   const [fromOpen, setFromOpen] = useState(false);
   const [toOpen, setToOpen] = useState(false);
   const [fromSearch, setFromSearch] = useState("");
@@ -715,6 +716,27 @@ export function SwapWidget({ initialBuyCoinId }: SwapWidgetProps = {}) {
           <div className="mt-1 flex justify-between">
             <span>Fee (0.5%)</span>
             <span>{formatCurrency(quote.feeUsd)}</span>
+          </div>
+          <div className="mt-1 flex justify-between">
+            <span>Slippage</span>
+            <span className="flex items-center gap-1">
+              {[50, 100, 200, 300].map((bps) => (
+                <button
+                  key={bps}
+                  type="button"
+                  onClick={() => setSlippageBps(bps)}
+                  className={`rounded px-1.5 py-0.5 text-xs ${
+                    slippageBps === bps ? "bg-amber-500/30 text-amber-300" : "hover:bg-slate-600/50"
+                  }`}
+                >
+                  {bps / 100}%
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="mt-1 flex justify-between">
+            <span>Minimum received</span>
+            <span>{(quote.toAmount * (1 - slippageBps / 10000)).toFixed(8).replace(/\.?0+$/, "")} {toCoin?.symbol}</span>
           </div>
         </div>
       )}

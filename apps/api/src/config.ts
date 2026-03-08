@@ -17,6 +17,7 @@ export const config = {
   stripeCancelUrl: process.env.STRIPE_CANCEL_URL || "http://localhost:3000/accounts?deposit=cancelled",
   stripeConnectReturnUrl: process.env.STRIPE_CONNECT_RETURN_URL || "http://localhost:3000/accounts?connect=success",
   stripeConnectRefreshUrl: process.env.STRIPE_CONNECT_REFRESH_URL || "http://localhost:3000/accounts?connect=refresh",
+  resendApiKey: process.env.RESEND_API_KEY || "",
   isProduction: isProd,
   /** Max fiat withdrawal (USD equivalent) per user per 24h. 0 = no limit. */
   withdrawalLimitDaily: parseFloat(process.env.WITHDRAWAL_LIMIT_DAILY || "0") || 0,

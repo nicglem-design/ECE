@@ -11,6 +11,7 @@ import aiRoutes from "./routes/ai";
 import marketRoutes from "./routes/market";
 import twofaRoutes from "./routes/twofa";
 import cronRoutes from "./routes/cron";
+import supportRoutes from "./routes/support";
 import { handleStripeWebhook } from "./routes/stripeWebhook";
 import { config } from "./config";
 import { apiLimiter, authLimiter } from "./middleware/rateLimit";
@@ -42,6 +43,7 @@ app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/market", marketRoutes);
 app.use("/api/v1/2fa", twofaRoutes);
 app.use("/api/v1/cron", cronRoutes);
+app.use("/api/v1/support", supportRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

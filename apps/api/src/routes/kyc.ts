@@ -40,7 +40,10 @@ router.get("/status", authMiddleware, async (req: Request, res: Response) => {
   const row = (await db.prepare("SELECT status FROM kyc_status WHERE user_id = ?").get(user.sub)) as { status: string } | undefined;
   const kycStatus = row?.status || "pending";
   const kycRequired = !!config.sumsubAppToken; // When KYC is configured, deposits/withdrawals require approval
-  res.json({ kycStatus, kycRequired });
+  const userRow = (await db.prepare("SELECT email_verified FROM users WHERE id = ?").get(user.sub)) as { email_verified: number } | undefined;
+  const emailVerified = userRow?.email_verified === 1;
+  const emailRequired = !!config.resendApiKey; // When email is configured, deposits/withdrawals require verification
+  res.json({ kycStatus, kycRequired, emailVerified, emailRequired });
 });
 
 router.post("/access-token", authMiddleware, async (req: Request, res: Response) => {

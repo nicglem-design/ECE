@@ -100,3 +100,29 @@ export function useLinkedAccounts() {
 
   return { accounts, loading, error, refetch: fetchAccounts, addAccount, removeAccount };
 }
+
+export function useFiatTransactions() {
+  const [transactions, setTransactions] = useState<FiatTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTransactions = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiGet<{ transactions: FiatTransaction[] }>("/api/v1/accounts/transactions");
+      setTransactions(data.transactions || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load transactions");
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  return { transactions, loading, error, refetch: fetchTransactions };
+}
