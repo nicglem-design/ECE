@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    const [usd, eur, depositSync, mmSeed] = await Promise.all([
+    const [usd, eur, depositSync, mmSeed, tokenCleanup] = await Promise.all([
       fetch(`${base}/api/crypto/consensus?currency=usd`, { cache: "no-store" }),
       fetch(`${base}/api/crypto/consensus?currency=eur`, { cache: "no-store" }),
       fetch(`${apiBase}/api/v1/cron/sync-deposits`, {
@@ -45,12 +45,16 @@ export async function GET(request: NextRequest) {
     const mmSeedData = mmSeed.ok
       ? ((await mmSeed.json()) as { ordersPlaced?: number; pairs?: number })
       : null;
+    const tokenCleanupData = tokenCleanup.ok
+      ? ((await tokenCleanup.json()) as { deleted?: number })
+      : null;
     return NextResponse.json({
       success: true,
       usd: usdOk,
       eur: eurOk,
       depositSync: depositSyncData ?? { error: "API not reachable" },
       marketMakerSeed: mmSeedData ?? { error: "API not reachable" },
+      tokenCleanup: tokenCleanupData ?? { error: "API not reachable" },
       message: "Daily crypto sync completed",
     });
   } catch (err) {

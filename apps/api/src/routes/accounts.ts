@@ -9,6 +9,7 @@ import { logAudit } from "../lib/audit";
 import { checkWithdrawalLimit } from "../lib/limits";
 import { requireKycApproved } from "../lib/kyc";
 import { requireEmailVerified } from "../lib/emailVerify";
+import { sendWithdrawalConfirmationEmail } from "../lib/email";
 import { increment } from "../lib/metrics";
 
 const router = Router();
@@ -371,6 +372,12 @@ router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => 
   ).run(txId, user.sub, curr, "withdraw", numAmount, status, destination, now);
   logAudit(user.sub, "withdraw_fiat", { currency: curr, amount: numAmount, destination }).catch(() => {});
   increment("fiat_withdrawals_total");
+  const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
+  if (userRow?.email) {
+    sendWithdrawalConfirmationEmail(userRow.email, numAmount, curr, destination).catch((e) =>
+      console.error("Withdrawal confirmation email error:", e)
+    );
+  }
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 

@@ -17,12 +17,17 @@ import { config } from "./config";
 import { apiLimiter, authLimiter } from "./middleware/rateLimit";
 import { getReadyStatus } from "./lib/health";
 import { runStartupCheck } from "./lib/startupCheck";
+import { cleanupExpiredTokens } from "./lib/cleanupTokens";
 import { logger } from "./lib/logger";
 import { getMetrics } from "./lib/metrics";
 
 const app = express();
 
 runStartupCheck();
+
+cleanupExpiredTokens()
+  .then((n) => n > 0 && logger.info({ deleted: n }, "Cleaned up expired auth tokens"))
+  .catch(() => {});
 
 const dataDir = path.join(process.cwd(), "data");
 if (!fs.existsSync(dataDir)) {

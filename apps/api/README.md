@@ -58,6 +58,8 @@ RPC URLs default to public endpoints. For production, use Infura/Alchemy.
 |------|--------|------|-------------|
 | `/api/v1/auth/login` | POST | No | Login |
 | `/api/v1/auth/signup` | POST | No | Register |
+| `/api/v1/auth/refresh` | POST | No | Refresh access token |
+| `/api/v1/auth/logout` | POST | No | Invalidate refresh token |
 | `/api/v1/profile` | GET, PATCH | Yes | Profile |
 | `/api/v1/wallet/chains` | GET | No | Supported chains |
 | `/api/v1/wallet/addresses` | GET | Yes | User addresses |

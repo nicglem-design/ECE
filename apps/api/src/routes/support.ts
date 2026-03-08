@@ -1,9 +1,10 @@
 /**
  * Support contact. Sends user messages to support email via Resend.
+ * Authenticated: uses user email. Guest: requires email in body.
  */
 
 import { Router, Request, Response } from "express";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, optionalAuth } from "../middleware/auth";
 import { sendEmail } from "../lib/email";
 import { db } from "../db";
 import { config } from "../config";
@@ -11,14 +12,14 @@ import { config } from "../config";
 const router = Router();
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || (process.env.EMAIL_FROM?.match(/<([^>]+)>/) ?? [])[1] || "support@example.com";
 
-/** POST /api/v1/support/contact - Send support message */
-router.post("/contact", authMiddleware, async (req: Request, res: Response) => {
+function escapeHtml(s: string): string {
+  return s.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** POST /api/v1/support/contact - Send support message (auth or guest with email) */
+router.post("/contact", optionalAuth, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string; email?: string } }).user;
-  if (!user) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  const { subject, message } = req.body;
+  const { subject, message, email: guestEmail } = req.body;
   if (!subject || typeof subject !== "string" || subject.trim().length === 0) {
     res.status(400).json({ message: "Subject is required" });
     return;
@@ -31,14 +32,26 @@ router.post("/contact", authMiddleware, async (req: Request, res: Response) => {
     res.status(400).json({ message: "Message too long" });
     return;
   }
-  const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
-  const userEmail = userRow?.email || "unknown@user";
+  let userEmail: string;
+  let userId: string | null = null;
+  if (user) {
+    const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
+    userEmail = userRow?.email || "unknown@user";
+    userId = user.sub;
+  } else {
+    const emailStr = typeof guestEmail === "string" ? guestEmail.trim() : "";
+    if (!emailStr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+      res.status(400).json({ message: "Valid email is required for guest submissions" });
+      return;
+    }
+    userEmail = emailStr;
+  }
   const html = `
-    <h2>Support request from ${userEmail}</h2>
-    <p><strong>Subject:</strong> ${subject.replace(/</g, "&lt;")}</p>
-    <p><strong>User ID:</strong> ${user.sub}</p>
+    <h2>Support request from ${escapeHtml(userEmail)}</h2>
+    <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
+    ${userId ? `<p><strong>User ID:</strong> ${escapeHtml(userId)}</p>` : "<p><strong>Guest</strong> (not logged in)</p>"}
     <p><strong>Message:</strong></p>
-    <pre style="white-space: pre-wrap; background: #f5f5f5; padding: 1em; border-radius: 4px;">${message.replace(/</g, "&lt;")}</pre>
+    <pre style="white-space: pre-wrap; background: #f5f5f5; padding: 1em; border-radius: 4px;">${escapeHtml(message)}</pre>
   `;
   const ok = await sendEmail(SUPPORT_EMAIL, `[ECE Support] ${subject.slice(0, 80)}`, html);
   if (!ok && config.resendApiKey) {

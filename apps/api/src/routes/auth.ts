@@ -37,6 +37,22 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters").max(500),
 });
 
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1).max(500),
+});
+
+function createTokenPair(userId: string, email: string) {
+  const token = jwt.sign(
+    { sub: userId, email },
+    config.jwtSecret,
+    { expiresIn: config.jwtExpiresIn } as jwt.SignOptions
+  );
+  const refreshToken = uuidv4();
+  const now = Date.now();
+  const refreshExpiresMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+  return { token, refreshToken, refreshExpiresMs, now };
+}
+
 router.post("/login", validateBody(loginSchema), async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -47,12 +63,11 @@ router.post("/login", validateBody(loginSchema), async (req: Request, res: Respo
       return;
     }
     logAudit(user.id, "login_success", { email: user.email }, getClientIp(req)).catch(() => {});
-    const token = jwt.sign(
-      { sub: user.id, email: user.email },
-      config.jwtSecret,
-      { expiresIn: config.jwtExpiresIn } as jwt.SignOptions
-    );
-    res.json({ token, email: user.email, emailVerified: !!(user.email_verified) });
+    const { token, refreshToken, refreshExpiresMs, now: pairNow } = createTokenPair(user.id, user.email);
+    await db.prepare(
+      "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'refresh', ?, ?)"
+    ).run(uuidv4(), user.id, refreshToken, pairNow + refreshExpiresMs, pairNow);
+    res.json({ token, refreshToken, email: user.email, emailVerified: !!(user.email_verified) });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Login failed" });
@@ -93,12 +108,11 @@ router.post("/signup", validateBody(signupSchema), async (req: Request, res: Res
       console.error("Verification email send error:", e)
     );
 
-    const token = jwt.sign(
-      { sub: id, email: email.toLowerCase() },
-      config.jwtSecret,
-      { expiresIn: config.jwtExpiresIn } as jwt.SignOptions
-    );
-    res.json({ token, email: email.toLowerCase(), emailVerified: false });
+    const { token, refreshToken, refreshExpiresMs, now: pairNow } = createTokenPair(id, email.toLowerCase());
+    await db.prepare(
+      "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'refresh', ?, ?)"
+    ).run(uuidv4(), id, refreshToken, pairNow + refreshExpiresMs, pairNow);
+    res.json({ token, refreshToken, email: email.toLowerCase(), emailVerified: false });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ message: "Registration failed" });
@@ -178,6 +192,46 @@ router.post("/forgot-password", validateBody(forgotPasswordSchema), async (req: 
   } catch (err) {
     console.error("Forgot password error:", err);
     res.status(500).json({ message: "Request failed" });
+  }
+});
+
+router.post("/refresh", validateBody(refreshSchema), async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+    const row = (await db.prepare(
+      "SELECT user_id FROM auth_tokens WHERE token = ? AND type = 'refresh' AND expires_at > ?"
+    ).get(refreshToken, Date.now())) as { user_id: string } | undefined;
+    if (!row) {
+      res.status(401).json({ message: "Invalid or expired refresh token" });
+      return;
+    }
+    const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(row.user_id)) as { email: string } | undefined;
+    if (!userRow) {
+      res.status(401).json({ message: "User not found" });
+      return;
+    }
+    const { token, refreshToken: newRefreshToken, refreshExpiresMs, now } = createTokenPair(row.user_id, userRow.email);
+    await db.prepare("DELETE FROM auth_tokens WHERE token = ?").run(refreshToken);
+    await db.prepare(
+      "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'refresh', ?, ?)"
+    ).run(uuidv4(), row.user_id, newRefreshToken, now + refreshExpiresMs, now);
+    res.json({ token, refreshToken: newRefreshToken });
+  } catch (err) {
+    console.error("Refresh error:", err);
+    res.status(500).json({ message: "Token refresh failed" });
+  }
+});
+
+router.post("/logout", async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+    if (refreshToken && typeof refreshToken === "string") {
+      await db.prepare("DELETE FROM auth_tokens WHERE token = ? AND type = 'refresh'").run(refreshToken);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ message: "Logout failed" });
   }
 });
 

@@ -11,6 +11,7 @@ import {
 import { API_BASE } from "@/lib/api";
 
 const TOKEN_KEY = "kanox_token";
+const REFRESH_TOKEN_KEY = "kanox_refresh_token";
 const EMAIL_KEY = "kanox_email";
 
 interface AuthContextValue {
@@ -62,9 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         return { ok: false, error: data.message || "Login failed" };
       }
-      const { token: t, email: e } = data;
+      const { token: t, refreshToken: rt, email: e } = data;
       if (t && e) {
         localStorage.setItem(TOKEN_KEY, t);
+        if (rt) localStorage.setItem(REFRESH_TOKEN_KEY, rt);
         localStorage.setItem(EMAIL_KEY, e);
         setToken(t);
         setEmail(e);
@@ -87,9 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         return { ok: false, error: data.message || "Registration failed" };
       }
-      const { token: t, email: e } = data;
+      const { token: t, refreshToken: rt, email: e } = data;
       if (t && e) {
         localStorage.setItem(TOKEN_KEY, t);
+        if (rt) localStorage.setItem(REFRESH_TOKEN_KEY, rt);
         localStorage.setItem(EMAIL_KEY, e);
         setToken(t);
         setEmail(e);
@@ -102,7 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const refreshToken = typeof window !== "undefined" ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+    if (refreshToken) {
+      fetch(`${API_BASE}/api/v1/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
+    }
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(EMAIL_KEY);
     setToken(null);
     setEmail(null);

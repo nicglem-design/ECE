@@ -11,6 +11,7 @@ import { syncBitcoinDepositsForUser } from "../crypto/depositSync-bitcoin";
 import { syncSolanaDepositsForUser } from "../crypto/depositSync-solana";
 import { syncLitecoinDepositsForUser } from "../crypto/depositSync-litecoin";
 import { syncDogecoinDepositsForUser } from "../crypto/depositSync-dogecoin";
+import { cleanupExpiredTokens } from "../lib/cleanupTokens";
 
 const router = Router();
 
@@ -69,6 +70,23 @@ router.post("/sync-deposits", async (req: Request, res: Response) => {
     console.error("Cron sync-deposits error:", err);
     res.status(500).json({
       error: err instanceof Error ? err.message : "Sync failed",
+    });
+  }
+});
+
+/** POST /cleanup-expired-tokens - Delete expired auth tokens. Call from cron. */
+router.post("/cleanup-expired-tokens", async (req: Request, res: Response) => {
+  if (!isCronAuthorized(req)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const deleted = await cleanupExpiredTokens();
+    res.json({ success: true, deleted });
+  } catch (err) {
+    console.error("Cron cleanup-expired-tokens error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Cleanup failed",
     });
   }
 });

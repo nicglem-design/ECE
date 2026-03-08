@@ -78,7 +78,7 @@ STRIPE_CONNECT_REFRESH_URL=https://yoursite.com/accounts?connect=refresh
 
 ## 4. Email (Resend)
 
-For verification and password reset:
+For verification, password reset, support form, and withdrawal confirmations:
 
 1. Sign up at [resend.com](https://resend.com)
 2. Verify your domain
@@ -87,10 +87,13 @@ For verification and password reset:
 ```bash
 RESEND_API_KEY=re_...
 EMAIL_FROM=ECE <noreply@yourdomain.com>
+SUPPORT_EMAIL=support@yourdomain.com
 APP_URL=https://yoursite.com
 FRONTEND_URL=https://yoursite.com
 APP_NAME=ECE
 ```
+
+When `RESEND_API_KEY` is set, deposits and withdrawals require email verification. Support form messages are sent to `SUPPORT_EMAIL` (falls back to address in `EMAIL_FROM` if unset).
 
 ---
 
@@ -131,7 +134,7 @@ API_INTERNAL_KEY=your-internal-key  # optional, for market maker
 | Path | Schedule | Purpose |
 |------|----------|---------|
 | `/api/cron/sync-deposits` | Every 15 min | Sync blockchain deposits for all users |
-| `/api/cron/daily-crypto-sync` | Daily 00:00 UTC | Cache warm + deposit sync + market maker seed |
+| `/api/cron/daily-crypto-sync` | Daily 00:00 UTC | Cache warm + deposit sync + market maker seed + expired token cleanup |
 
 > **Note**: Vercel Hobby plan may limit cron frequency. Pro plan supports custom schedules.
 
@@ -181,6 +184,7 @@ STRIPE_CONNECT_REFRESH_URL=...
 # Email
 RESEND_API_KEY=re_...
 EMAIL_FROM=...
+SUPPORT_EMAIL=support@yourdomain.com
 APP_URL=...
 FRONTEND_URL=...
 
@@ -253,3 +257,4 @@ The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half th
 - [ ] `JWT_SECRET` and `WALLET_ENCRYPTION_KEY` are strong and unique
 - [ ] `SWAP_REAL_MONEY=true` in web app for real swaps
 - [ ] `SEED_MARKET_MAKER_ON_START=true` in API for order book liquidity
+- [ ] `SUPPORT_EMAIL` set (for support form)

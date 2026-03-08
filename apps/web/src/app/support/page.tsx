@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { WalletNav } from "@/components/WalletNav";
 import { apiPost } from "@/lib/apiClient";
 
 export default function SupportPage() {
   const { t } = useLanguage();
+  const { isAuthenticated } = useAuth();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -23,15 +25,26 @@ export default function SupportPage() {
       setError("Please fill in both subject and message.");
       return;
     }
+    if (!isAuthenticated && !email.trim()) {
+      setError("Please enter your email so we can reply.");
+      return;
+    }
+    if (!isAuthenticated && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setLoading(true);
     try {
-      await apiPost<{ success: boolean; message?: string }>("/api/v1/support/contact", {
+      const body: { subject: string; message: string; email?: string } = {
         subject: subject.trim(),
         message: message.trim(),
-      });
+      };
+      if (!isAuthenticated) body.email = email.trim();
+      await apiPost<{ success: boolean; message?: string }>("/api/v1/support/contact", body);
       setSuccess(true);
       setSubject("");
       setMessage("");
+      setEmail("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message.");
     } finally {
@@ -40,9 +53,8 @@ export default function SupportPage() {
   }
 
   return (
-    <ProtectedRoute>
-      <main className="min-h-screen bg-theme">
-        <WalletNav />
+    <main className="min-h-screen bg-theme">
+      <WalletNav />
         <div className="mx-auto max-w-xl px-6 py-8">
           <h1 className="text-2xl font-bold text-slate-200">Contact support</h1>
           <p className="mt-2 text-slate-400">
@@ -50,6 +62,22 @@ export default function SupportPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            {!isAuthenticated && (
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-400">
+                  Your email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required={!isAuthenticated}
+                  className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+            )}
             <div>
               <label htmlFor="subject" className="block text-sm font-medium text-slate-400">
                 Subject
@@ -124,6 +152,5 @@ export default function SupportPage() {
           </Link>
         </div>
       </main>
-    </ProtectedRoute>
   );
 }

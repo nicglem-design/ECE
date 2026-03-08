@@ -16,6 +16,7 @@
 const API_BASE = process.env.API_BACKEND_URL || "http://localhost:4000";
 const TEST_EMAIL = `e2e-${Date.now()}@test.local`;
 const TEST_PASSWORD = "TestPassword123!";
+const TEST_BIRTH_DATE = "1990-01-15"; // 18+ for eligibility
 
 let token: string;
 
@@ -40,7 +41,12 @@ async function main() {
   console.log("\n1. Sign up...");
   const signup = await fetchApi("/api/v1/auth/signup", {
     method: "POST",
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({
+      email: TEST_EMAIL,
+      password: TEST_PASSWORD,
+      birthDate: TEST_BIRTH_DATE,
+      acceptedTerms: true,
+    }),
   });
   token = signup.token;
   console.log("   OK");
