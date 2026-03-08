@@ -32,6 +32,8 @@ function AccountsContent() {
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [showWithdraw2FA, setShowWithdraw2FA] = useState(false);
+  const [withdrawTotpCode, setWithdrawTotpCode] = useState("");
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addType, setAddType] = useState<"bank" | "card">("bank");
   const [addLabel, setAddLabel] = useState("");
@@ -358,6 +360,22 @@ function AccountsContent() {
                   <p className="mt-1 text-xs text-green-500">Bank connected via Stripe</p>
                 )}
               </div>
+              {showWithdraw2FA && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                  <label className="block text-sm font-medium text-amber-200">
+                    Enter 2FA code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={withdrawTotpCode}
+                    onChange={(e) => setWithdrawTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    className="mt-2 w-32 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 font-mono text-lg tracking-widest text-slate-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              )}
               <button
                 onClick={handleWithdraw}
                 disabled={withdrawLoading || !withdrawAmount}
