@@ -111,6 +111,7 @@ db.exec(`
     label TEXT NOT NULL,
     last_four TEXT,
     currency TEXT,
+    stripe_account_id TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
@@ -136,3 +137,9 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 `);
+
+try {
+  db.exec("ALTER TABLE linked_accounts ADD COLUMN stripe_account_id TEXT");
+} catch {
+  // Column may already exist
+}

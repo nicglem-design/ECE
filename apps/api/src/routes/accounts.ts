@@ -168,7 +168,7 @@ router.post("/stripe-webhook", (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/accounts/withdraw - Withdraw fiat to linked account or card */
-router.post("/withdraw", authMiddleware, (req: Request, res: Response) => {
+router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -194,12 +194,36 @@ router.post("/withdraw", authMiddleware, (req: Request, res: Response) => {
     return;
   }
   let destination = "External account";
+  let stripeAccountId: string | null = null;
   if (linkedAccountId) {
     const linked = db.prepare(
-      "SELECT label, last_four FROM linked_accounts WHERE id = ? AND user_id = ?"
-    ).get(linkedAccountId, user.sub) as { label: string; last_four: string } | undefined;
-    if (linked) destination = `${linked.label} ****${linked.last_four || ""}`;
+      "SELECT label, last_four, stripe_account_id FROM linked_accounts WHERE id = ? AND user_id = ?"
+    ).get(linkedAccountId, user.sub) as { label: string; last_four: string; stripe_account_id: string | null } | undefined;
+    if (linked) {
+      destination = `${linked.label} ****${linked.last_four || ""}`;
+      stripeAccountId = linked.stripe_account_id ?? null;
+    }
   }
+
+  let status = "completed";
+  if (stripe && stripeAccountId && numAmount >= 1) {
+    try {
+      const amountCents = Math.round(numAmount * 100);
+      await stripe.transfers.create({
+        amount: amountCents,
+        currency: curr.toLowerCase(),
+        destination: stripeAccountId,
+        description: `Withdrawal to ${destination}`,
+        metadata: { userId: user.sub },
+      });
+    } catch (err) {
+      status = "failed";
+      const msg = err instanceof Error ? err.message : "Stripe transfer failed";
+      res.status(400).json({ message: msg });
+      return;
+    }
+  }
+
   const now = Date.now();
   db.prepare(
     "UPDATE fiat_balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND currency = ?"
@@ -207,7 +231,7 @@ router.post("/withdraw", authMiddleware, (req: Request, res: Response) => {
   const txId = `fiat_wd_${Date.now()}_${uuidv4().slice(0, 8)}`;
   db.prepare(
     "INSERT INTO fiat_transactions (id, user_id, currency, type, amount, status, destination, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(txId, user.sub, curr, "withdraw", numAmount, "completed", destination, now);
+  ).run(txId, user.sub, curr, "withdraw", numAmount, status, destination, now);
   res.json({ success: true, amount: numAmount, currency: curr });
 });
 
@@ -219,8 +243,8 @@ router.get("/linked", authMiddleware, (req: Request, res: Response) => {
     return;
   }
   const rows = db.prepare(
-    "SELECT id, type, label, last_four, currency FROM linked_accounts WHERE user_id = ? ORDER BY created_at DESC"
-  ).all(user.sub) as { id: string; type: string; label: string; last_four: string; currency: string }[];
+    "SELECT id, type, label, last_four, currency, stripe_account_id as stripeAccountId FROM linked_accounts WHERE user_id = ? ORDER BY created_at DESC"
+  ).all(user.sub) as { id: string; type: string; label: string; last_four: string; currency: string; stripeAccountId: string | null }[];
   res.json({ accounts: rows });
 });
 
@@ -231,7 +255,7 @@ router.post("/linked", authMiddleware, (req: Request, res: Response) => {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const { type, label, lastFour } = req.body;
+  const { type, label, lastFour, stripeAccountId } = req.body;
   if (!type || !label) {
     res.status(400).json({ message: "type and label required" });
     return;
@@ -243,8 +267,8 @@ router.post("/linked", authMiddleware, (req: Request, res: Response) => {
   const id = `la_${uuidv4()}`;
   const now = Date.now();
   db.prepare(
-    "INSERT INTO linked_accounts (id, user_id, type, label, last_four, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, user.sub, type, String(label).trim(), lastFour ? String(lastFour).slice(-4) : null, now);
+    "INSERT INTO linked_accounts (id, user_id, type, label, last_four, stripe_account_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, user.sub, type, String(label).trim(), lastFour ? String(lastFour).slice(-4) : null, stripeAccountId ? String(stripeAccountId) : null, now);
   res.json({ success: true, id });
 });
 

@@ -8,8 +8,23 @@ import {
   isEVMChain,
   getChainBalance,
   sendNative,
+  ERC20_CONTRACTS,
+  getERC20Balance,
+  sendERC20,
 } from "../crypto/custody";
+import {
+  isBitcoinCustodyEnabled,
+  getBitcoinBalance,
+  sendBitcoin,
+} from "../crypto/custody-bitcoin";
+import {
+  isSolanaCustodyEnabled,
+  getSolanaBalance,
+  sendSolana,
+} from "../crypto/custody-solana";
 import { syncDepositsForUser } from "../crypto/depositSync";
+import { syncBitcoinDepositsForUser } from "../crypto/depositSync-bitcoin";
+import { syncSolanaDepositsForUser } from "../crypto/depositSync-solana";
 import { parseEther } from "ethers";
 
 const SWAP_COINS = [
@@ -83,21 +98,21 @@ router.get("/balances", authMiddleware, async (req: Request, res: Response) => {
       syncDepositsForUser(user.sub, c, addr).catch(() => {});
     }
   }
-
-  const assets: { chainId: string; symbol: string; name: string; amount: string }[] = [];
-  for (const r of rows) {
-    if (isEVMChain(r.chainId) && isCustodyEnabled()) {
-      try {
-        const address = getOrCreateAddress(user.sub, r.chainId);
-        const chainBal = await getChainBalance(r.chainId, address);
-        assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: chainBal });
-      } catch {
-        assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: String(r.amount) });
-      }
-    } else {
-      assets.push({ chainId: r.chainId, symbol: r.symbol, name: r.name, amount: String(r.amount) });
-    }
+  if (isBitcoinCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "bitcoin");
+    syncBitcoinDepositsForUser(user.sub, addr).catch(() => {});
   }
+  if (isSolanaCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "solana");
+    syncSolanaDepositsForUser(user.sub, addr).catch(() => {});
+  }
+
+  const assets = rows.map((r) => ({
+    chainId: r.chainId,
+    symbol: r.symbol,
+    name: r.name,
+    amount: String(r.amount),
+  }));
   res.json({ assets });
 });
 
@@ -107,26 +122,61 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const { chainId, toAddress, amount } = req.body;
+  const { chainId, toAddress, amount, tokenId, evmChainId } = req.body;
   if (!chainId || !toAddress || !amount) {
     res.status(400).json({ message: "chainId, toAddress, and amount required" });
     return;
   }
+  const effectiveTokenId = tokenId || (["tether", "usd-coin"].includes(chainId) ? chainId : null);
+  const effectiveEvmChain = evmChainId || "ethereum";
   const numAmount = parseFloat(amount);
   if (isNaN(numAmount) || numAmount <= 0) {
     res.status(400).json({ message: "Invalid amount" });
     return;
   }
-  const chain = CHAINS.find((c) => c.id === chainId);
+  const chain = CHAINS.find((c) => c.id === chainId) || SWAP_COINS.find((c) => c.id === chainId);
   if (!chain) {
     res.status(400).json({ message: "Unsupported chain" });
     return;
   }
-  const myAddress = getOrCreateAddress(user.sub, chainId);
-  const useRealCustody = isEVMChain(chainId) && isCustodyEnabled();
+  const myAddress = getOrCreateAddress(user.sub, effectiveEvmChain);
 
-  if (useRealCustody) {
-    const encKey = getEncryptedPrivateKey(user.sub);
+  if (effectiveTokenId && ERC20_CONTRACTS[effectiveEvmChain]?.[effectiveTokenId] && isCustodyEnabled()) {
+    const encKey = getEncryptedPrivateKey(user.sub, "evm");
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    const tokenContract = ERC20_CONTRACTS[effectiveEvmChain][effectiveTokenId];
+    try {
+      const chainBal = await getERC20Balance(effectiveEvmChain, tokenContract, myAddress);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const txHash = await sendERC20(effectiveEvmChain, encKey, tokenContract, toAddress.trim(), String(numAmount));
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
+  const useEvmCustody = isEVMChain(chainId) && isCustodyEnabled();
+  const useBtcCustody = chainId === "bitcoin" && isBitcoinCustodyEnabled();
+  const useSolCustody = chainId === "solana" && isSolanaCustodyEnabled();
+
+  if (useEvmCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub, "evm");
     if (!encKey) {
       res.status(400).json({ message: "Wallet not initialized" });
       return;
@@ -139,6 +189,64 @@ router.post("/send", authMiddleware, async (req: Request, res: Response) => {
       }
       const amountWei = parseEther(String(numAmount));
       const txHash = await sendNative(chainId, encKey, toAddress.trim(), amountWei);
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
+  if (useBtcCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub, "bitcoin");
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    try {
+      const chainBal = await getBitcoinBalance(myAddress);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const txHash = await sendBitcoin(encKey, toAddress.trim(), numAmount);
+      const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
+      const now = Date.now();
+      db.prepare(
+        "UPDATE balances SET amount = amount - ?, updated_at = ? WHERE user_id = ? AND chain_id = ?"
+      ).run(numAmount, now, user.sub, chainId);
+      db.prepare(
+        "INSERT INTO transactions (id, user_id, chain_id, type, amount, from_address, to_address, tx_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).run(txId, user.sub, chainId, "sent", String(numAmount), myAddress, toAddress.trim(), txHash, now);
+      res.json({ success: true, txHash });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Transaction failed";
+      res.status(400).json({ message: msg });
+    }
+    return;
+  }
+
+  if (useSolCustody) {
+    const encKey = getEncryptedPrivateKey(user.sub, "solana");
+    if (!encKey) {
+      res.status(400).json({ message: "Wallet not initialized" });
+      return;
+    }
+    try {
+      const chainBal = await getSolanaBalance(myAddress);
+      if (parseFloat(chainBal) < numAmount) {
+        res.status(400).json({ message: "Insufficient balance" });
+        return;
+      }
+      const txHash = await sendSolana(encKey, toAddress.trim(), numAmount);
       const txId = `tx_${Date.now()}_${uuidv4().slice(0, 8)}`;
       const now = Date.now();
       db.prepare(
@@ -190,6 +298,12 @@ router.post("/sync-deposits", authMiddleware, async (req: Request, res: Response
     if (isEVMChain(r.chainId)) {
       total += await syncDepositsForUser(user.sub, r.chainId, r.address);
     }
+    if (r.chainId === "bitcoin") {
+      total += await syncBitcoinDepositsForUser(user.sub, r.address);
+    }
+    if (r.chainId === "solana") {
+      total += await syncSolanaDepositsForUser(user.sub, r.address);
+    }
   }
   res.json({ success: true, newDeposits: total });
 });
@@ -212,7 +326,20 @@ router.get("/transactions/:chainId", authMiddleware, (req: Request, res: Respons
     txHash: r.txHash,
     timestamp: new Date(r.createdAt).toISOString(),
   }));
-  const explorerTx = chainId === "ethereum" ? "https://etherscan.io/tx/" : chainId === "bitcoin" ? "https://mempool.space/tx/" : "";
+  const explorerTx =
+    chainId === "ethereum"
+      ? "https://etherscan.io/tx/"
+      : chainId === "bitcoin"
+        ? "https://mempool.space/tx/"
+        : chainId === "solana"
+          ? "https://solscan.io/tx/"
+          : chainId === "binancecoin"
+            ? "https://bscscan.com/tx/"
+            : chainId === "matic-network"
+              ? "https://polygonscan.com/tx/"
+              : chainId === "avalanche-2"
+                ? "https://snowtrace.io/tx/"
+                : "";
   res.json({ transactions, explorerTx });
 });
 
@@ -254,7 +381,7 @@ router.post("/deposit", authMiddleware, (req: Request, res: Response) => {
   res.json({ success: true, amount: numAmount });
 });
 
-router.post("/swap-execution", authMiddleware, (req: Request, res: Response) => {
+router.post("/swap-execution", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -272,6 +399,18 @@ router.post("/swap-execution", authMiddleware, (req: Request, res: Response) => 
     return;
   }
   ensureBalances(user.sub);
+  if (isCustodyEnabled()) {
+    const addr = getOrCreateAddress(user.sub, "ethereum");
+    for (const c of ["ethereum", "binancecoin", "matic-network", "avalanche-2"]) {
+      syncDepositsForUser(user.sub, c, addr).catch(() => {});
+    }
+  }
+  if (isBitcoinCustodyEnabled()) {
+    syncBitcoinDepositsForUser(user.sub, getOrCreateAddress(user.sub, "bitcoin")).catch(() => {});
+  }
+  if (isSolanaCustodyEnabled()) {
+    syncSolanaDepositsForUser(user.sub, getOrCreateAddress(user.sub, "solana")).catch(() => {});
+  }
   const fromChain = CHAINS.find((c) => c.id === fromCoinId) || SWAP_COINS.find((c) => c.id === fromCoinId) || { id: fromCoinId, symbol: fromCoinId.toUpperCase().slice(0, 4), name: fromCoinId };
   const toChain = CHAINS.find((c) => c.id === toCoinId) || SWAP_COINS.find((c) => c.id === toCoinId) || { id: toCoinId, symbol: toCoinId.toUpperCase().slice(0, 4), name: toCoinId };
   const now = Date.now();
