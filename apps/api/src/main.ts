@@ -12,7 +12,6 @@ import marketRoutes from "./routes/market";
 import twofaRoutes from "./routes/twofa";
 import cronRoutes from "./routes/cron";
 import supportRoutes from "./routes/support";
-import { handleStripeWebhook } from "./routes/stripeWebhook";
 import { handleKycWebhook } from "./routes/kycWebhook";
 import { config } from "./config";
 import { apiLimiter, authLimiter, supportContactLimiter, aiChatLimiter } from "./middleware/rateLimit";
@@ -44,7 +43,6 @@ const corsOrigins = config.corsOrigins
 app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(requestIdMiddleware);
 app.use(requestLogMiddleware);
-app.post("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.post("/api/v1/kyc/webhook", express.raw({ type: "application/json" }), handleKycWebhook);
 app.use(express.json({ limit: "100kb" }));
 app.use("/api/v1", apiLimiter);

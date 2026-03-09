@@ -9,8 +9,7 @@ export function runStartupCheck(): void {
   if (!config.isProduction) return;
 
   const warnings: string[] = [];
-  if (!config.stripeSecretKey) warnings.push("STRIPE_SECRET_KEY not set - deposits disabled");
-  if (!config.stripeWebhookSecret && config.stripeSecretKey) warnings.push("STRIPE_WEBHOOK_SECRET not set - webhook verification disabled");
+  if (!config.braintreeMerchantId || !config.braintreePrivateKey) warnings.push("BRAINTREE_MERCHANT_ID / BRAINTREE_PRIVATE_KEY not set - card deposits disabled");
   if (!config.sumsubAppToken) warnings.push("SUMSUB_APP_TOKEN not set - KYC in stub mode");
   if (config.sumsubAppToken && !config.sumsubWebhookSecret) warnings.push("SUMSUB_WEBHOOK_SECRET not set - KYC webhook signature verification disabled");
   if (!process.env.RESEND_API_KEY) warnings.push("RESEND_API_KEY not set - email verification/reset disabled");

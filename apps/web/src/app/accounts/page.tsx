@@ -13,16 +13,11 @@ import {
   type LinkedAccount,
 } from "@/hooks/useFiatAccounts";
 import { apiPost, apiGet } from "@/lib/apiClient";
+import { BraintreePaymentModal } from "@/components/BraintreePaymentModal";
 import { getCurrencySymbol } from "@/lib/currencies";
 
 const FIAT_CURRENCIES = ["USD", "EUR", "GBP", "SEK"];
 const QUICK_AMOUNTS = [50, 100, 250, 500, 1000, 2500];
-
-interface ConnectStatus {
-  linked: boolean;
-  bankDetails?: { bankName?: string; last4?: string };
-  linkedAccountId?: string;
-}
 
 function AccountsContent() {
   const searchParams = useSearchParams();
@@ -30,8 +25,6 @@ function AccountsContent() {
   const { balances, loading, refetch } = useFiatBalances();
   const { accounts, addAccount, removeAccount, refetch: refetchLinked } = useLinkedAccounts();
   const { transactions, loading: txLoading, refetch: refetchTx } = useFiatTransactions();
-  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
-  const [connectLoading, setConnectLoading] = useState(false);
   const [kycStatus, setKycStatus] = useState<string | null>(null);
   const [kycRequired, setKycRequired] = useState(false);
   const [emailVerified, setEmailVerified] = useState(true);
@@ -55,18 +48,9 @@ function AccountsContent() {
   const [addLastFour, setAddLastFour] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [braintreeModalOpen, setBraintreeModalOpen] = useState(false);
   const [resendEmailLoading, setResendEmailLoading] = useState(false);
   const [resendEmailSent, setResendEmailSent] = useState(false);
-
-  const fetchConnectStatus = async () => {
-    try {
-      const data = await apiGet<ConnectStatus>("/api/v1/accounts/connect-status");
-      setConnectStatus(data);
-      if (data.linkedAccountId) refetchLinked();
-    } catch {
-      setConnectStatus({ linked: false });
-    }
-  };
 
   const fetchKycStatus = async () => {
     try {
@@ -81,70 +65,37 @@ function AccountsContent() {
   };
 
   useEffect(() => {
-    fetchConnectStatus();
     fetchKycStatus();
   }, []);
 
   useEffect(() => {
-    const connect = searchParams.get("connect");
     const deposit = searchParams.get("deposit");
-    if (connect === "success" || connect === "refresh") {
-      fetchConnectStatus();
-    }
     if (deposit === "success") {
       refetch();
       refetchTx();
     }
   }, [searchParams, refetch, refetchTx]);
 
-  const handleConnectBank = async () => {
-    setConnectLoading(true);
-    try {
-      const data = await apiPost<{ url?: string; message?: string }>(
-        "/api/v1/accounts/connect-onboarding",
-        {}
-      );
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setWithdrawError(data.message || "Connect not available");
-      }
-    } catch (err) {
-      setWithdrawError(err instanceof Error ? err.message : "Connect failed");
-    } finally {
-      setConnectLoading(false);
-    }
-  };
-
-  const handlePayWithCardOrApplePay = async () => {
+  const handlePayWithCardOrApplePay = () => {
     const amt = parseFloat(depositAmount);
     if (isNaN(amt) || amt <= 0) {
       setDepositError("Enter a valid amount");
       return;
     }
-    setCheckoutLoading(true);
-    setDepositError(null);
-    try {
-      const base = typeof window !== "undefined" ? window.location.origin : "";
-      const data = await apiPost<{ url?: string; message?: string }>(
-        "/api/v1/accounts/create-checkout",
-        {
-          currency: depositCurrency,
-          amount: amt,
-          successUrl: `${base}/accounts?deposit=success`,
-          cancelUrl: `${base}/accounts?deposit=cancelled`,
-        }
-      );
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setDepositError(data.message || "Payment not available");
-      }
-    } catch (err) {
-      setDepositError(err instanceof Error ? err.message : "Payment failed");
-    } finally {
-      setCheckoutLoading(false);
+    if (depositCurrency !== "USD") {
+      setDepositError("Card payments support USD only. Use manual deposit for other currencies.");
+      return;
     }
+    setDepositError(null);
+    setBraintreeModalOpen(true);
+  };
+
+  const handleBraintreeSuccess = () => {
+    setDepositSuccess(`Added ${parseFloat(depositAmount).toLocaleString()} ${depositCurrency}`);
+    setDepositAmount("");
+    refetch();
+    refetchTx();
+    setTimeout(() => setDepositSuccess(null), 4000);
   };
 
   const handleDeposit = async () => {
@@ -378,10 +329,10 @@ function AccountsContent() {
               <div className="flex gap-3">
                 <button
                   onClick={handlePayWithCardOrApplePay}
-                  disabled={checkoutLoading || depositLoading || !depositAmount}
+                  disabled={depositLoading || !depositAmount}
                   className="flex-1 rounded-xl bg-green-600 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-50"
                 >
-                  {checkoutLoading ? "Redirecting..." : "Card or Apple Pay"}
+                  Card, Apple Pay, or Google Pay
                 </button>
                 <button
                   onClick={handleDeposit}
@@ -506,29 +457,12 @@ function AccountsContent() {
             )}
           </div>
 
-          {/* Connect bank for real withdrawals */}
+          {/* Connect bank for real withdrawals - not configured with Braintree */}
           <div className="mt-6 rounded-xl border border-slate-600 bg-slate-800/40 p-4">
             <h2 className="text-lg font-semibold text-slate-200">Bank withdrawals</h2>
-            {connectStatus?.linked ? (
-              <div className="mt-3 flex items-center justify-between rounded-lg bg-green-900/20 px-4 py-3">
-                <span className="text-green-400">
-                  ✓ Connected{connectStatus.bankDetails?.last4 ? ` ****${connectStatus.bankDetails.last4}` : ""}
-                </span>
-              </div>
-            ) : (
-              <div className="mt-3">
-                <p className="text-sm text-slate-500">
-                  Connect your bank to withdraw fiat to your account.
-                </p>
-                <button
-                  onClick={handleConnectBank}
-                  disabled={connectLoading}
-                  className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  {connectLoading ? "Connecting..." : "Connect bank"}
-                </button>
-              </div>
-            )}
+            <p className="mt-2 text-sm text-slate-500">
+              Bank withdrawals are not currently configured. Fiat withdrawals are disabled.
+            </p>
           </div>
 
           {/* Transaction history */}
@@ -691,6 +625,15 @@ function AccountsContent() {
               KanoExchange →
             </Link>
           </div>
+
+          <BraintreePaymentModal
+            isOpen={braintreeModalOpen}
+            onClose={() => setBraintreeModalOpen(false)}
+            amount={parseFloat(depositAmount) || 0}
+            currency={depositCurrency}
+            onSuccess={handleBraintreeSuccess}
+            onError={setDepositError}
+          />
         </div>
       </main>
     </ProtectedRoute>

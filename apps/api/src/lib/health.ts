@@ -1,7 +1,7 @@
 /**
  * Health checks for production readiness.
  * GET /health - basic liveness
- * GET /health/ready - readiness (DB, Stripe, Sumsub, Resend, RPC)
+ * GET /health/ready - readiness (DB, Braintree, Sumsub, Resend, RPC)
  * GET /health/ready?deep=true - also probe external service connectivity
  */
 
@@ -11,7 +11,7 @@ import { config } from "../config";
 export interface HealthStatus {
   ok: boolean;
   database: "ok" | "error";
-  stripe: "configured" | "not_configured" | "error";
+  braintree: "configured" | "not_configured" | "error";
   sumsub: "configured" | "not_configured" | "error";
   resend: "configured" | "not_configured" | "error";
   rpc: "configured" | "not_configured" | "error";
@@ -27,12 +27,19 @@ export async function checkDatabase(): Promise<boolean> {
   }
 }
 
-async function checkStripeConnectivity(): Promise<boolean> {
-  if (!config.stripeSecretKey) return false;
+async function checkBraintreeConnectivity(): Promise<boolean> {
+  if (!config.braintreeMerchantId || !config.braintreePrivateKey) return false;
   try {
-    const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(config.stripeSecretKey);
-    await stripe.balance.retrieve();
+    const braintree = await import("braintree");
+    const gateway = new braintree.BraintreeGateway({
+      environment: config.braintreeEnvironment === "production"
+        ? braintree.Environment.Production
+        : braintree.Environment.Sandbox,
+      merchantId: config.braintreeMerchantId,
+      publicKey: config.braintreePublicKey,
+      privateKey: config.braintreePrivateKey,
+    });
+    await gateway.clientToken.generate({});
     return true;
   } catch {
     return false;
@@ -83,20 +90,20 @@ async function checkRpcConnectivity(): Promise<boolean> {
 export async function getReadyStatus(deep = false): Promise<HealthStatus> {
   const dbOk = await checkDatabase();
 
-  let stripe: HealthStatus["stripe"] = config.stripeSecretKey ? "configured" : "not_configured";
+  let braintree: HealthStatus["braintree"] = config.braintreeMerchantId && config.braintreePrivateKey ? "configured" : "not_configured";
   let sumsub: HealthStatus["sumsub"] = config.sumsubAppToken ? "configured" : "not_configured";
   let resend: HealthStatus["resend"] = config.resendApiKey ? "configured" : "not_configured";
   const rpcUrl = process.env.ETH_RPC_URL || process.env.ETHEREUM_RPC_URL;
   let rpc: HealthStatus["rpc"] = rpcUrl ? "configured" : "not_configured";
 
   if (deep) {
-    const [stripeOk, sumsubOk, resendOk, rpcOk] = await Promise.all([
-      stripe === "configured" ? checkStripeConnectivity() : Promise.resolve(false),
+    const [braintreeOk, sumsubOk, resendOk, rpcOk] = await Promise.all([
+      braintree === "configured" ? checkBraintreeConnectivity() : Promise.resolve(false),
       sumsub === "configured" ? checkSumsubConnectivity() : Promise.resolve(false),
       resend === "configured" ? checkResendConnectivity() : Promise.resolve(false),
       rpc === "configured" ? checkRpcConnectivity() : Promise.resolve(false),
     ]);
-    if (stripe === "configured") stripe = stripeOk ? "configured" : "error";
+    if (braintree === "configured") braintree = braintreeOk ? "configured" : "error";
     if (sumsub === "configured") sumsub = sumsubOk ? "configured" : "error";
     if (resend === "configured") resend = resendOk ? "configured" : "error";
     if (rpc === "configured") rpc = rpcOk ? "configured" : "error";
@@ -107,7 +114,7 @@ export async function getReadyStatus(deep = false): Promise<HealthStatus> {
   return {
     ok,
     database: dbOk ? "ok" : "error",
-    stripe,
+    braintree,
     sumsub,
     resend,
     rpc,

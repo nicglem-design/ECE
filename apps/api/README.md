@@ -47,9 +47,9 @@ RPC URLs default to public endpoints. For production, use Infura/Alchemy.
 
 ## Fiat deposits & withdrawals
 
-- **Card or Apple Pay**: When `STRIPE_SECRET_KEY` is set, `POST /api/v1/accounts/create-checkout` creates a Stripe Checkout session. Apple Pay appears automatically on Safari when the customer has it configured.
+- **Card, Apple Pay, Google Pay**: When Braintree is configured, `GET /api/v1/accounts/checkout-client-token` returns a client token for the Drop-in UI. `POST /api/v1/accounts/checkout-charge` processes the payment with the nonce from the client.
 - **Manual deposit**: `POST /api/v1/accounts/deposit` adds funds without a payment provider.
-- **Withdrawals**: `POST /api/v1/accounts/withdraw` sends to bank via Stripe Connect when user has linked a bank.
+- **Withdrawals**: Bank withdrawals are not configured. `POST /api/v1/accounts/withdraw` returns 503 (WITHDRAWALS_NOT_CONFIGURED).
 - **KYC**: When `SUMSUB_APP_TOKEN` is set, deposits and withdrawals require KYC approval. Without it, no enforcement (stub mode).
 
 ## Endpoints

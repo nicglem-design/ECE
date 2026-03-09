@@ -46,33 +46,26 @@ Replace public RPCs with paid providers for reliability and rate limits.
 
 ---
 
-## 3. Stripe
+## 3. Braintree (card, Apple Pay, Google Pay)
 
-### Deposits (card + Apple Pay)
+### Deposits
 
-1. Create a Stripe account and get **live** keys
-2. Set in API env:
-
-```bash
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_SUCCESS_URL=https://yoursite.com/accounts?deposit=success
-STRIPE_CANCEL_URL=https://yoursite.com/accounts?deposit=cancelled
-```
-
-3. **Webhook**: In Stripe Dashboard → Developers → Webhooks, add:
-   - URL: `https://your-api-domain.com/api/v1/accounts/stripe-webhook`
-   - Events: `checkout.session.completed`
-
-### Withdrawals (Stripe Connect)
-
-1. Enable Stripe Connect in your Stripe Dashboard
-2. Set in API env:
+1. Create a [Braintree](https://www.braintreepayments.com/) (PayPal) account
+2. Get your API credentials from the Braintree Control Panel
+3. Set in API env:
 
 ```bash
-STRIPE_CONNECT_RETURN_URL=https://yoursite.com/accounts?connect=success
-STRIPE_CONNECT_REFRESH_URL=https://yoursite.com/accounts?connect=refresh
+BRAINTREE_MERCHANT_ID=your_merchant_id
+BRAINTREE_PUBLIC_KEY=your_public_key
+BRAINTREE_PRIVATE_KEY=your_private_key
+BRAINTREE_ENVIRONMENT=production
 ```
+
+4. For **Apple Pay** and **Google Pay**, enable them in the Braintree Control Panel and configure your domains. For Google Pay, set `NEXT_PUBLIC_GOOGLE_PAY_MERCHANT_ID` in the web app env.
+
+### Withdrawals
+
+Bank withdrawals are not supported with Braintree. A separate payout provider would need to be integrated for fiat withdrawals.
 
 ---
 
@@ -173,13 +166,11 @@ AVAX_RPC_URL=...
 SOLANA_RPC_URL=...
 ETHERSCAN_API_KEY=...
 
-# Stripe
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_SUCCESS_URL=...
-STRIPE_CANCEL_URL=...
-STRIPE_CONNECT_RETURN_URL=...
-STRIPE_CONNECT_REFRESH_URL=...
+# Braintree (deposits)
+BRAINTREE_MERCHANT_ID=...
+BRAINTREE_PUBLIC_KEY=...
+BRAINTREE_PRIVATE_KEY=...
+BRAINTREE_ENVIRONMENT=production
 
 # Email
 RESEND_API_KEY=re_...
@@ -226,9 +217,9 @@ NEXT_PUBLIC_APP_URL=https://yoursite.com
 ## 9. Health Checks
 
 - **GET /health** – Liveness (always 200 when process is up)
-- **GET /health/ready** – Readiness: checks DB connectivity, reports Stripe config status. Returns 503 if DB unreachable.
+- **GET /health/ready** – Readiness: checks DB connectivity, reports Braintree config status. Returns 503 if DB unreachable.
 
-Use `/health/ready` for Kubernetes readiness probes or load balancer health checks. Add `?deep=true` to probe external services (Stripe, Sumsub, Resend, RPC).
+Use `/health/ready` for Kubernetes readiness probes or load balancer health checks. Add `?deep=true` to probe external services (Braintree, Sumsub, Resend, RPC).
 
 **GET /metrics** – Simple JSON metrics (deposits, withdrawals, swaps, errors). In production, protected: requires `Authorization: Bearer <CRON_SECRET|API_INTERNAL_KEY>` or request from internal IP.
 
@@ -246,7 +237,7 @@ npm run start:api
 npm run test:e2e-fiat
 ```
 
-The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half the BTC back to USD, and attempts withdraw (expects BANK_REQUIRED if Stripe Connect not configured). Users with email `*@test.local` are auto-verified so the test passes even when `RESEND_API_KEY` is set.
+The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half the BTC back to USD, and attempts withdraw (expects WITHDRAWALS_NOT_CONFIGURED since bank withdrawals are not available). Users with email `*@test.local` are auto-verified so the test passes even when `RESEND_API_KEY` is set.
 
 ---
 
@@ -255,7 +246,7 @@ The test: signs up a user, deposits 100 USD, swaps 10 USD → BTC, swaps half th
 - [ ] PostgreSQL database configured
 - [ ] API deployed with all env vars
 - [ ] Web app deployed with `API_BACKEND_URL` pointing to API
-- [ ] Stripe webhook URL set and tested
+- [ ] Braintree credentials configured for card deposits
 - [ ] Sumsub webhook URL set (if using KYC)
 - [ ] Cron jobs configured (Vercel or external)
 - [ ] Production RPC URLs set (not public defaults)

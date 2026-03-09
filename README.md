@@ -39,4 +39,4 @@ Verifies: signup → deposit → buy crypto → sell crypto → withdraw. See [d
 
 ## Production deployment
 
-See **[docs/PRODUCTION.md](docs/PRODUCTION.md)** for full production setup: database, RPC URLs, Stripe, KYC, email, and cron configuration.
+See **[docs/PRODUCTION.md](docs/PRODUCTION.md)** for full production setup: database, RPC URLs, Braintree, KYC, email, and cron configuration.
