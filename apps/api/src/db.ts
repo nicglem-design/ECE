@@ -242,6 +242,12 @@ if (connectionString) {
         CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
         CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_type ON auth_tokens(user_id, type);
 
+        CREATE TABLE IF NOT EXISTS revoked_jwt (
+          jti TEXT PRIMARY KEY,
+          expires_at BIGINT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_revoked_jwt_expires ON revoked_jwt(expires_at);
+
         CREATE TABLE IF NOT EXISTS audit_log (
           id TEXT PRIMARY KEY,
           user_id TEXT,
@@ -492,6 +498,12 @@ if (connectionString) {
     );
     CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
     CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_type ON auth_tokens(user_id, type);
+
+    CREATE TABLE IF NOT EXISTS revoked_jwt (
+      jti TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_revoked_jwt_expires ON revoked_jwt(expires_at);
 
     CREATE TABLE IF NOT EXISTS audit_log (
       id TEXT PRIMARY KEY,

@@ -10,6 +10,7 @@ export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   sumsubAppToken: process.env.SUMSUB_APP_TOKEN || "",
   sumsubSecretKey: process.env.SUMSUB_SECRET_KEY || "",
+  sumsubWebhookSecret: process.env.SUMSUB_WEBHOOK_SECRET || "",
   sumsubBaseUrl: process.env.SUMSUB_BASE_URL || "https://api.sumsub.com",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
@@ -23,6 +24,10 @@ export const config = {
   withdrawalLimitDaily: parseFloat(process.env.WITHDRAWAL_LIMIT_DAILY || "0") || 0,
   /** Max crypto send count per user per 24h. 0 = no limit. */
   sendLimitDaily: parseInt(process.env.SEND_LIMIT_DAILY || "0", 10) || 0,
+  /** Allow manual fiat deposit (demo/test). In production, set explicitly to allow. */
+  allowManualDeposit: process.env.ALLOW_MANUAL_DEPOSIT === "true" || process.env.ALLOW_MANUAL_DEPOSIT === "1" || !isProd,
+  /** CORS allowed origins. Comma-separated. Empty = allow all (dev). */
+  corsOrigins: process.env.CORS_ORIGINS || "",
 };
 
 if (isProd && !config.jwtSecret) {

@@ -223,11 +223,15 @@ router.post("/create-checkout", authMiddleware, async (req: Request, res: Respon
   }
 });
 
-/** POST /api/v1/accounts/deposit - Add fiat to account (manual/demo) */
+/** POST /api/v1/accounts/deposit - Add fiat to account (manual/demo). Restricted in production unless ALLOW_MANUAL_DEPOSIT=true. */
 router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  if (!config.allowManualDeposit) {
+    res.status(403).json({ message: "Manual deposit is disabled in production. Use Stripe Checkout to add funds." });
     return;
   }
   const kycCheck = await requireKycApproved(user.sub);

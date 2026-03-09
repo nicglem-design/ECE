@@ -8,10 +8,11 @@ import { db } from "../db";
 export async function cleanupExpiredTokens(): Promise<number> {
   try {
     const now = Date.now();
-    const result = await db.prepare(
-      "DELETE FROM auth_tokens WHERE expires_at < ?"
-    ).run(now);
-    return result.changes ?? 0;
+    const [authResult, revokedResult] = await Promise.all([
+      db.prepare("DELETE FROM auth_tokens WHERE expires_at < ?").run(now),
+      db.prepare("DELETE FROM revoked_jwt WHERE expires_at < ?").run(now),
+    ]);
+    return (authResult.changes ?? 0) + (revokedResult.changes ?? 0);
   } catch (err) {
     console.error("Cleanup expired tokens error:", err);
     return 0;

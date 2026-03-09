@@ -1,8 +1,17 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
+import { validateBody } from "../middleware/validate";
 
 const router = Router();
+
+const profilePatchSchema = z.object({
+  displayName: z.string().max(100).optional(),
+  avatarUrl: z.union([z.string().url().max(500), z.literal("")]).optional(),
+  theme: z.enum(["dark", "light", "system"]).optional(),
+  preferredCurrency: z.enum(["usd", "eur", "gbp", "sek"]).optional(),
+}).strict();
 
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string; email: string } }).user;
@@ -34,7 +43,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
   });
 });
 
-router.patch("/", authMiddleware, async (req: Request, res: Response) => {
+router.patch("/", authMiddleware, validateBody(profilePatchSchema), async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });

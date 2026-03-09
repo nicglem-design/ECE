@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-      const uid = userId ?? undefined;
+      const uid = "auth";
       const fromStable = isStablecoin(fromCoinId);
       const toStable = isStablecoin(toCoinId);
 

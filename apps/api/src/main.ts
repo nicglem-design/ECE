@@ -13,8 +13,9 @@ import twofaRoutes from "./routes/twofa";
 import cronRoutes from "./routes/cron";
 import supportRoutes from "./routes/support";
 import { handleStripeWebhook } from "./routes/stripeWebhook";
+import { handleKycWebhook } from "./routes/kycWebhook";
 import { config } from "./config";
-import { apiLimiter, authLimiter } from "./middleware/rateLimit";
+import { apiLimiter, authLimiter, supportContactLimiter, aiChatLimiter } from "./middleware/rateLimit";
 import { getReadyStatus } from "./lib/health";
 import { runStartupCheck } from "./lib/startupCheck";
 import { cleanupExpiredTokens } from "./lib/cleanupTokens";
@@ -34,8 +35,12 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-app.use(cors({ origin: true, credentials: true }));
+const corsOrigins = config.corsOrigins
+  ? config.corsOrigins.split(",").map((o) => o.trim()).filter(Boolean)
+  : true;
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.post("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }), handleStripeWebhook);
+app.post("/api/v1/kyc/webhook", express.raw({ type: "application/json" }), handleKycWebhook);
 app.use(express.json({ limit: "100kb" }));
 app.use("/api/v1", apiLimiter);
 
@@ -48,7 +53,7 @@ app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/market", marketRoutes);
 app.use("/api/v1/2fa", twofaRoutes);
 app.use("/api/v1/cron", cronRoutes);
-app.use("/api/v1/support", supportRoutes);
+app.use("/api/v1/support", supportContactLimiter, supportRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

@@ -106,11 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     const refreshToken = typeof window !== "undefined" ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
-    if (refreshToken) {
+    const accessToken = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+    if (refreshToken || accessToken) {
       fetch(`${API_BASE}/api/v1/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({ refreshToken, accessToken }),
       }).catch(() => {});
     }
     localStorage.removeItem(TOKEN_KEY);

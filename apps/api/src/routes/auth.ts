@@ -42,8 +42,9 @@ const refreshSchema = z.object({
 });
 
 function createTokenPair(userId: string, email: string) {
+  const jti = uuidv4();
   const token = jwt.sign(
-    { sub: userId, email },
+    { sub: userId, email, jti },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn } as jwt.SignOptions
   );
@@ -229,9 +230,24 @@ router.post("/refresh", validateBody(refreshSchema), async (req: Request, res: R
 
 router.post("/logout", async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken, accessToken } = req.body;
     if (refreshToken && typeof refreshToken === "string") {
       await db.prepare("DELETE FROM auth_tokens WHERE token = ? AND type = 'refresh'").run(refreshToken);
+    }
+    if (accessToken && typeof accessToken === "string") {
+      try {
+        const payload = jwt.decode(accessToken) as { jti?: string; exp?: number } | null;
+        if (payload?.jti && payload.exp) {
+          const expiresAt = payload.exp * 1000;
+          try {
+            await db.prepare("INSERT INTO revoked_jwt (jti, expires_at) VALUES (?, ?)").run(payload.jti, expiresAt);
+          } catch {
+            /* already revoked */
+          }
+        }
+      } catch {
+        /* ignore decode errors */
+      }
     }
     res.json({ success: true });
   } catch (err) {

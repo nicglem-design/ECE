@@ -191,6 +191,7 @@ FRONTEND_URL=...
 # KYC (optional)
 SUMSUB_APP_TOKEN=...
 SUMSUB_SECRET_KEY=...
+SUMSUB_WEBHOOK_SECRET=...  # From Sumsub webhook config; verifies webhook signatures
 
 # Cron
 CRON_SECRET=...
@@ -199,6 +200,10 @@ API_INTERNAL_KEY=...
 # Limits
 WITHDRAWAL_LIMIT_DAILY=10000
 SEND_LIMIT_DAILY=20
+
+# Security
+ALLOW_MANUAL_DEPOSIT=  # Set to true only for demo/test; manual deposit disabled in prod by default
+CORS_ORIGINS=https://yoursite.com  # Comma-separated; empty = allow all (dev only)
 
 # Market
 SEED_MARKET_MAKER_ON_START=true

@@ -54,8 +54,10 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
-  const { pair, side, price, amount, userId: bodyUserId } = req.body;
-  const effectiveUserId = bodyUserId || user.sub;
+  const { pair, side, price, amount } = req.body;
+  const internalKey = req.headers["x-internal-key"] as string | undefined;
+  const isInternal = !!(internalKey && process.env.API_INTERNAL_KEY && internalKey === process.env.API_INTERNAL_KEY);
+  const effectiveUserId = isInternal ? (req.body?.userId || "mm") : user.sub;
   if (!pair || !side || !price || !amount) {
     res.status(400).json({ error: "pair, side, price, amount required" });
     return;
