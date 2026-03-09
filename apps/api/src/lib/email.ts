@@ -1,8 +1,9 @@
 /**
- * Email service. Uses Resend when RESEND_API_KEY is set, else logs to console (dev).
+ * Email service. Uses Resend when RESEND_API_KEY is set, else logs to logger (dev).
  */
 
 import { Resend } from "resend";
+import { logger } from "./logger";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -21,17 +22,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
         html,
       });
       if (error) {
-        console.error("Resend error:", error);
+        logger.error({ error }, "Resend error");
         return false;
       }
       return true;
     } catch (err) {
-      console.error("Email send error:", err);
+      logger.error({ err }, "Email send error");
       return false;
     }
   }
-  console.log("[DEV] Email would send to", to, ":", subject);
-  console.log("[DEV] Body:", html.slice(0, 200) + "...");
+  logger.debug({ to, subject, bodyPreview: html.slice(0, 200) + "..." }, "[DEV] Email would send");
   return true;
 }
 

@@ -1,4 +1,5 @@
 import "dotenv/config"; // load env before config
+import { logger } from "./lib/logger";
 
 const isProd = process.env.NODE_ENV === "production";
 const defaultJwtSecret = isProd ? "" : "dev-secret-change-in-production";
@@ -31,6 +32,6 @@ export const config = {
 };
 
 if (isProd && !config.jwtSecret) {
-  console.error("FATAL: JWT_SECRET must be set in production");
+  logger.error("FATAL: JWT_SECRET must be set in production");
   process.exit(1);
 }

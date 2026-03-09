@@ -3,6 +3,7 @@
  */
 
 import { config } from "../config";
+import { logger } from "./logger";
 
 export function runStartupCheck(): void {
   if (!config.isProduction) return;
@@ -17,7 +18,6 @@ export function runStartupCheck(): void {
   if (!process.env.ETH_RPC_URL && !process.env.ETHEREUM_RPC_URL) warnings.push("Using public RPC - set ETH_RPC_URL for production custody");
 
   if (warnings.length > 0) {
-    console.warn("[Production] Config warnings:");
-    warnings.forEach((w) => console.warn("  -", w));
+    logger.warn({ warnings }, "[Production] Config warnings");
   }
 }

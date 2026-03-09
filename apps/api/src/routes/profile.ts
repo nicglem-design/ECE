@@ -6,7 +6,7 @@ import { validateBody } from "../middleware/validate";
 
 const router = Router();
 
-const profilePatchSchema = z.object({
+export const profilePatchSchema = z.object({
   displayName: z.string().max(100).optional(),
   avatarUrl: z.union([z.string().url().max(500), z.literal("")]).optional(),
   theme: z.enum(["dark", "light", "system"]).optional(),

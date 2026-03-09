@@ -9,6 +9,7 @@ import { db } from "../db";
 import { config } from "../config";
 import { requireKycApproved } from "../lib/kyc";
 import { requireEmailVerified } from "../lib/emailVerify";
+import { logger } from "../lib/logger";
 
 const SUPPORTED_FIAT = ["USD", "EUR", "GBP", "SEK"];
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
@@ -51,13 +52,13 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
       const kycCheck = await requireKycApproved(userId);
       const emailCheck = await requireEmailVerified(userId);
       if (!kycCheck.ok || !emailCheck.ok) {
-        console.warn(`Stripe webhook: KYC or email not verified for user ${userId}, refunding payment ${session.payment_intent || session.id}`);
+        logger.warn({ userId, paymentId: session.payment_intent || session.id }, "Stripe webhook: KYC or email not verified, refunding payment");
         const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent as Stripe.PaymentIntent)?.id;
         if (paymentIntentId) {
           try {
             await stripe!.refunds.create({ payment_intent: paymentIntentId, reason: "requested_by_customer" });
           } catch (e) {
-            console.error("Stripe refund failed:", e);
+            logger.error({ err: e }, "Stripe refund failed");
           }
         }
       } else {

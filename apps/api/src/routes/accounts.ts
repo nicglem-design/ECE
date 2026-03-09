@@ -8,6 +8,7 @@ import { config } from "../config";
 import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { v4 as uuidv4 } from "uuid";
 import { logAudit } from "../lib/audit";
+import { logger } from "../lib/logger";
 import { checkWithdrawalLimit } from "../lib/limits";
 import { requireKycApproved } from "../lib/kyc";
 import { requireEmailVerified } from "../lib/emailVerify";
@@ -174,7 +175,7 @@ router.get("/connect-status", authMiddleware, async (req: Request, res: Response
         }
       }
     } catch (err) {
-      console.error("Connect status fetch bank details:", err);
+      logger.error({ err }, "Connect status fetch bank details");
     }
   }
 
@@ -401,7 +402,7 @@ router.post("/withdraw", authMiddleware, validateBody(withdrawSchema), async (re
   const userRow = (await db.prepare("SELECT email FROM users WHERE id = ?").get(user.sub)) as { email: string } | undefined;
   if (userRow?.email) {
     sendWithdrawalConfirmationEmail(userRow.email, numAmount, curr, destination).catch((e) =>
-      console.error("Withdrawal confirmation email error:", e)
+      logger.error({ err: e }, "Withdrawal confirmation email error")
     );
   }
   res.json({ success: true, amount: numAmount, currency: curr });

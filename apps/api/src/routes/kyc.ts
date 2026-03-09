@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
 import { config } from "../config";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -52,7 +53,7 @@ router.post("/access-token", authMiddleware, async (req: Request, res: Response)
     const data = (await res2.json()) as { token?: string };
     res.json({ token: data.token });
   } catch (err) {
-    console.error("Sumsub access token error:", err);
+    logger.error({ err }, "Sumsub access token error");
     res.status(503).json({ message: "KYC service unavailable" });
   }
 });

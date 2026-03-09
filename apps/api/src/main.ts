@@ -83,6 +83,12 @@ app.get("/metrics", metricsAuthMiddleware, (_req, res) => {
   res.json(getMetrics());
 });
 
+// Global error handler – must be last
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err }, "Unhandled error");
+  res.status(500).json({ message: "Internal server error" });
+});
+
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port }, "API running");
   if (process.env.SEED_MARKET_MAKER_ON_START === "true" || process.env.SEED_MARKET_MAKER_ON_START === "1") {

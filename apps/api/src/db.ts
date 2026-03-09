@@ -4,6 +4,7 @@
  */
 
 import path from "path";
+import { logger } from "./lib/logger";
 import fs from "fs";
 import os from "os";
 
@@ -282,7 +283,7 @@ if (connectionString) {
         /* column may exist */
       }
     } catch (err) {
-      console.error("Supabase schema init error:", err);
+      logger.error({ err }, "Supabase schema init error");
     }
   })();
 } else {
@@ -527,7 +528,7 @@ if (connectionString) {
     if (code === "SQLITE_READONLY" || code === "SQLITE_CANTOPEN") {
       db.close();
       const fallbackPath = path.join(os.tmpdir(), "kanox.db");
-      console.warn(`Database path not writable (${dbPath}), using fallback: ${fallbackPath}`);
+      logger.warn({ dbPath, fallbackPath }, "Database path not writable, using fallback");
       db = new Database(fallbackPath);
       runSchema(db);
     } else {

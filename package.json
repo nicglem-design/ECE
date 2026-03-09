@@ -7,6 +7,12 @@
     "packages/*"
   ],
   "scripts": {
+    "test": "npm run test:unit",
+    "test:unit": "cd apps/api && npm run test",
+    "test:coverage": "cd apps/api && npm run test:coverage",
+    "test:e2e": "npm-run-all test:e2e-auth test:e2e-support test:e2e-fiat",
+    "test:e2e-auth": "npx tsx scripts/e2e-auth-flow.ts",
+    "test:e2e-support": "npx tsx scripts/e2e-support-flow.ts",
     "test:e2e-fiat": "npx tsx scripts/e2e-fiat-flow.ts",
     "dev": "ulimit -n 65536 2>/dev/null || true; npm-run-all --parallel dev:web dev:api",
     "dev:web": "ulimit -n 65536 2>/dev/null || true; cd apps/web && npx next dev --hostname 127.0.0.1 --webpack",

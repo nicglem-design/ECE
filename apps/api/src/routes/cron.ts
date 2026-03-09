@@ -12,6 +12,7 @@ import { syncSolanaDepositsForUser } from "../crypto/depositSync-solana";
 import { syncLitecoinDepositsForUser } from "../crypto/depositSync-litecoin";
 import { syncDogecoinDepositsForUser } from "../crypto/depositSync-dogecoin";
 import { cleanupExpiredTokens } from "../lib/cleanupTokens";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.post("/sync-deposits", async (req: Request, res: Response) => {
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     });
   } catch (err) {
-    console.error("Cron sync-deposits error:", err);
+    logger.error({ err }, "Cron sync-deposits error");
     res.status(500).json({
       error: err instanceof Error ? err.message : "Sync failed",
     });
@@ -84,7 +85,7 @@ router.post("/cleanup-expired-tokens", async (req: Request, res: Response) => {
     const deleted = await cleanupExpiredTokens();
     res.json({ success: true, deleted });
   } catch (err) {
-    console.error("Cron cleanup-expired-tokens error:", err);
+    logger.error({ err }, "Cron cleanup-expired-tokens error");
     res.status(500).json({
       error: err instanceof Error ? err.message : "Cleanup failed",
     });
@@ -104,7 +105,7 @@ router.post("/seed-market-maker", async (req: Request, res: Response) => {
       ...result,
     });
   } catch (err) {
-    console.error("Cron seed-market-maker error:", err);
+    logger.error({ err }, "Cron seed-market-maker error");
     res.status(500).json({
       error: err instanceof Error ? err.message : "Seed failed",
     });

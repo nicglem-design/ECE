@@ -5,6 +5,7 @@
 
 import { db } from "../db";
 import { v4 as uuidv4 } from "uuid";
+import { logger } from "./logger";
 
 export type AuditAction =
   | "login_success"
@@ -29,6 +30,6 @@ export async function logAudit(
       "INSERT INTO audit_log (id, user_id, action, details, ip, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(id, userId ?? null, action, detailsJson, ip ?? null, now);
   } catch (err) {
-    console.error("Audit log failed:", err);
+    logger.error({ err }, "Audit log failed");
   }
 }

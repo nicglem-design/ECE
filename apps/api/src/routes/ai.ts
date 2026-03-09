@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import OpenAI from "openai";
 import { authMiddleware } from "../middleware/auth";
 import { config } from "../config";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post("/chat", authMiddleware, async (req: Request, res: Response) => {
     const reply = completion.choices[0]?.message?.content || "I couldn't generate a response.";
     res.json({ reply });
   } catch (err) {
-    console.error("OpenAI error:", err);
+    logger.error({ err }, "OpenAI error");
     res.status(500).json({ reply: "Sorry, I encountered an error. Please try again." });
   }
 });

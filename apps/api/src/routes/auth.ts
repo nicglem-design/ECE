@@ -9,6 +9,7 @@ import { validateBody } from "../middleware/validate";
 import { authMiddleware } from "../middleware/auth";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../lib/email";
 import { logAudit } from "../lib/audit";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -16,28 +17,28 @@ function getClientIp(req: Request): string | undefined {
   return (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip;
 }
 
-const loginSchema = z.object({
+export const loginSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(1).max(500),
 });
 
-const signupSchema = z.object({
+export const signupSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(8, "Password must be at least 8 characters").max(500),
   birthDate: z.string().optional(),
   acceptedTerms: z.boolean().optional(),
 });
 
-const forgotPasswordSchema = z.object({
+export const forgotPasswordSchema = z.object({
   email: z.string().email().max(255),
 });
 
-const resetPasswordSchema = z.object({
+export const resetPasswordSchema = z.object({
   token: z.string().min(1).max(500),
   password: z.string().min(8, "Password must be at least 8 characters").max(500),
 });
 
-const refreshSchema = z.object({
+export const refreshSchema = z.object({
   refreshToken: z.string().min(1).max(500),
 });
 
@@ -70,7 +71,7 @@ router.post("/login", validateBody(loginSchema), async (req: Request, res: Respo
     ).run(uuidv4(), user.id, refreshToken, pairNow + refreshExpiresMs, pairNow);
     res.json({ token, refreshToken, email: user.email, emailVerified: !!(user.email_verified) });
   } catch (err) {
-    console.error("Login error:", err);
+    logger.error({ err }, "Login error");
     res.status(500).json({ message: "Login failed" });
   }
 });
@@ -110,7 +111,7 @@ router.post("/signup", validateBody(signupSchema), async (req: Request, res: Res
         "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'email_verify', ?, ?)"
       ).run(uuidv4(), id, verifyToken, verifyExpires, now);
       sendVerificationEmail(emailLower, verifyToken).catch((e) =>
-        console.error("Verification email send error:", e)
+        logger.error("Verification email send error:", e)
       );
     }
 
@@ -120,7 +121,7 @@ router.post("/signup", validateBody(signupSchema), async (req: Request, res: Res
     ).run(uuidv4(), id, refreshToken, pairNow + refreshExpiresMs, pairNow);
     res.json({ token, refreshToken, email: emailLower, emailVerified: !!emailVerified });
   } catch (err) {
-    console.error("Signup error:", err);
+    logger.error({ err }, "Signup error");
     res.status(500).json({ message: "Registration failed" });
   }
 });
@@ -143,7 +144,7 @@ router.post("/verify-email", validateBody(verifyEmailSchema), async (req: Reques
     await db.prepare("DELETE FROM auth_tokens WHERE token = ?").run(token);
     res.json({ success: true });
   } catch (err) {
-    console.error("Verify email error:", err);
+    logger.error({ err }, "Verify email error");
     res.status(500).json({ message: "Verification failed" });
   }
 });
@@ -174,7 +175,7 @@ router.post("/resend-verification", authMiddleware, async (req: Request, res: Re
     await sendVerificationEmail(row.email, verifyToken);
     res.json({ success: true, message: "Verification email sent. Check your inbox." });
   } catch (err) {
-    console.error("Resend verification error:", err);
+    logger.error({ err }, "Resend verification error");
     res.status(500).json({ message: "Failed to send verification email" });
   }
 });
@@ -191,12 +192,12 @@ router.post("/forgot-password", validateBody(forgotPasswordSchema), async (req: 
         "INSERT INTO auth_tokens (id, user_id, token, type, expires_at, created_at) VALUES (?, ?, ?, 'password_reset', ?, ?)"
       ).run(uuidv4(), user.id, resetToken, expires, now);
       sendPasswordResetEmail(email.toLowerCase(), resetToken).catch((e) =>
-        console.error("Password reset email send error:", e)
+        logger.error({ err: e }, "Password reset email send error")
       );
     }
     res.json({ success: true, message: "If an account exists, you will receive a password reset link." });
   } catch (err) {
-    console.error("Forgot password error:", err);
+    logger.error({ err }, "Forgot password error");
     res.status(500).json({ message: "Request failed" });
   }
 });
@@ -223,7 +224,7 @@ router.post("/refresh", validateBody(refreshSchema), async (req: Request, res: R
     ).run(uuidv4(), row.user_id, newRefreshToken, now + refreshExpiresMs, now);
     res.json({ token, refreshToken: newRefreshToken });
   } catch (err) {
-    console.error("Refresh error:", err);
+    logger.error({ err }, "Refresh error");
     res.status(500).json({ message: "Token refresh failed" });
   }
 });
@@ -251,7 +252,7 @@ router.post("/logout", async (req: Request, res: Response) => {
     }
     res.json({ success: true });
   } catch (err) {
-    console.error("Logout error:", err);
+    logger.error({ err }, "Logout error");
     res.status(500).json({ message: "Logout failed" });
   }
 });
@@ -272,7 +273,7 @@ router.post("/reset-password", validateBody(resetPasswordSchema), async (req: Re
     logAudit(row.user_id, "password_reset", {}, getClientIp(req)).catch(() => {});
     res.json({ success: true });
   } catch (err) {
-    console.error("Reset password error:", err);
+    logger.error({ err }, "Reset password error");
     res.status(500).json({ message: "Reset failed" });
   }
 });

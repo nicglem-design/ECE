@@ -4,6 +4,7 @@
  */
 
 import { db } from "../db";
+import { logger } from "./logger";
 
 export async function cleanupExpiredTokens(): Promise<number> {
   try {
@@ -14,7 +15,7 @@ export async function cleanupExpiredTokens(): Promise<number> {
     ]);
     return (authResult.changes ?? 0) + (revokedResult.changes ?? 0);
   } catch (err) {
-    console.error("Cleanup expired tokens error:", err);
+    logger.error({ err }, "Cleanup expired tokens error");
     return 0;
   }
 }

@@ -7,6 +7,7 @@ import { Request, Response } from "express";
 import crypto from "crypto";
 import { db } from "../db";
 import { config } from "../config";
+import { logger } from "../lib/logger";
 
 function verifySumsubSignature(rawBody: Buffer, digestHeader: string | undefined, algHeader: string | undefined): boolean {
   if (!config.sumsubWebhookSecret) return false;
@@ -25,7 +26,7 @@ export async function handleKycWebhook(req: Request, res: Response): Promise<voi
   res.status(200).send("OK");
   const rawBody = (req as Request & { body?: Buffer }).body as Buffer | undefined;
   if (!rawBody || !Buffer.isBuffer(rawBody)) {
-    console.error("KYC webhook: no raw body");
+    logger.error("KYC webhook: no raw body");
     return;
   }
   const digestHeader = req.headers["x-payload-digest"] as string | undefined;
@@ -33,18 +34,18 @@ export async function handleKycWebhook(req: Request, res: Response): Promise<voi
 
   if (config.sumsubWebhookSecret) {
     if (!verifySumsubSignature(rawBody, digestHeader, algHeader)) {
-      console.error("KYC webhook: invalid signature");
+      logger.error("KYC webhook: invalid signature");
       return;
     }
   } else if (config.sumsubAppToken) {
-    console.warn("KYC webhook: SUMSUB_WEBHOOK_SECRET not set - signature verification skipped");
+    logger.warn("KYC webhook: SUMSUB_WEBHOOK_SECRET not set - signature verification skipped");
   }
 
   let body: { applicantId?: string; externalUserId?: string; reviewResult?: { reviewAnswer?: string }; type?: string };
   try {
     body = JSON.parse(rawBody.toString("utf8"));
   } catch {
-    console.error("KYC webhook: invalid JSON");
+    logger.error("KYC webhook: invalid JSON");
     return;
   }
 
@@ -62,6 +63,6 @@ export async function handleKycWebhook(req: Request, res: Response): Promise<voi
       "UPDATE kyc_status SET status = ?, updated_at = ? WHERE user_id = ?"
     ).run(status, now, userId);
   } catch (err) {
-    console.error("KYC webhook error:", err);
+    logger.error({ err }, "KYC webhook error");
   }
 }
