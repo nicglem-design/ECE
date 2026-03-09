@@ -3,7 +3,9 @@
  */
 
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { authMiddleware } from "../middleware/auth";
+import { validateBody } from "../middleware/validate";
 import {
   placeOrder,
   cancelOrder,
@@ -18,6 +20,14 @@ import {
 } from "../orderbook/engine";
 
 const router = Router();
+
+const placeOrderSchema = z.object({
+  pair: z.string().min(1).max(20),
+  side: z.enum(["buy", "sell"]),
+  price: z.coerce.number().positive(),
+  amount: z.coerce.number().positive(),
+  userId: z.string().optional(),
+}).strict();
 
 /** Resolve userId from auth. */
 async function getUserId(req: Request): Promise<string | null> {
@@ -48,7 +58,7 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
     return next();
   }
   authMiddleware(req, res, next);
-}, async (req: Request, res: Response) => {
+}, validateBody(placeOrderSchema), async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ error: "Authentication required" });
@@ -58,21 +68,9 @@ router.post("/orders", (req: Request, res: Response, next: () => void) => {
   const internalKey = req.headers["x-internal-key"] as string | undefined;
   const isInternal = !!(internalKey && process.env.API_INTERNAL_KEY && internalKey === process.env.API_INTERNAL_KEY);
   const effectiveUserId = isInternal ? (req.body?.userId || "mm") : user.sub;
-  if (!pair || !side || !price || !amount) {
-    res.status(400).json({ error: "pair, side, price, amount required" });
-    return;
-  }
-  if (side !== "buy" && side !== "sell") {
-    res.status(400).json({ error: "side must be buy or sell" });
-    return;
-  }
   const normalizedPair = String(pair).toUpperCase().replace(/-/g, "");
-  const numPrice = parseFloat(String(price));
-  const numAmount = parseFloat(String(amount));
-  if (isNaN(numPrice) || numPrice <= 0 || isNaN(numAmount) || numAmount <= 0) {
-    res.status(400).json({ error: "price and amount must be positive numbers" });
-    return;
-  }
+  const numPrice = typeof price === "number" ? price : parseFloat(String(price));
+  const numAmount = typeof amount === "number" ? amount : parseFloat(String(amount));
   try {
     const { order, trades } = await placeOrder(effectiveUserId, normalizedPair, side, numPrice, numAmount);
     res.json({ order, trades });
@@ -96,6 +94,8 @@ router.delete("/orders/:orderId", authMiddleware, async (req: Request, res: Resp
   res.json({ success: true });
 });
 
+const CACHE_30S = { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" };
+
 /** GET /orderbook/:pair - Get order book snapshot */
 router.get("/orderbook/:pair", async (req: Request, res: Response) => {
   const pair = String(req.params.pair || "").toUpperCase().replace(/-/g, "");
@@ -104,6 +104,7 @@ router.get("/orderbook/:pair", async (req: Request, res: Response) => {
     return;
   }
   const snapshot = await getOrderBookSnapshot(pair);
+  res.set("Cache-Control", CACHE_30S["Cache-Control"]);
   res.json(snapshot);
 });
 
@@ -112,6 +113,7 @@ router.get("/trades/:pair", async (req: Request, res: Response) => {
   const pair = String(req.params.pair || "").toUpperCase().replace(/-/g, "");
   const limit = Math.min(parseInt(String(req.query.limit || "50"), 10) || 50, 100);
   const trades = await getTrades(pair, limit);
+  res.set("Cache-Control", CACHE_30S["Cache-Control"]);
   res.json({ trades });
 });
 
@@ -140,12 +142,14 @@ router.get("/prices", async (req: Request, res: Response) => {
   }
 
   if (Object.keys(prices).length === 0) {
+    res.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=60");
     res.json({ prices: {}, priceChange24h: {}, source: null });
     return;
   }
 
   prices["tether"] = 1 / rate;
   priceChange24h["tether"] = 0;
+  res.set("Cache-Control", "public, s-maxage=30, stale-while-revalidate=60");
   res.json({ prices, priceChange24h, source: "orderbook" });
 });
 

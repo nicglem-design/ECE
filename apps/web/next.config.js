@@ -4,6 +4,20 @@ const path = require('path');
 const API_BACKEND = process.env.API_BACKEND_URL || 'http://localhost:4000';
 
 const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "coin-images.coingecko.com",
+        pathname: "/coins/images/**",
+      },
+      {
+        protocol: "https",
+        hostname: "assets.coingecko.com",
+        pathname: "/**",
+      },
+    ],
+  },
   async rewrites() {
     return [
       { source: '/api/v1/auth/:path*', destination: `${API_BACKEND}/api/v1/auth/:path*` },

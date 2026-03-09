@@ -228,9 +228,9 @@ NEXT_PUBLIC_APP_URL=https://yoursite.com
 - **GET /health** – Liveness (always 200 when process is up)
 - **GET /health/ready** – Readiness: checks DB connectivity, reports Stripe config status. Returns 503 if DB unreachable.
 
-Use `/health/ready` for Kubernetes readiness probes or load balancer health checks.
+Use `/health/ready` for Kubernetes readiness probes or load balancer health checks. Add `?deep=true` to probe external services (Stripe, Sumsub, Resend, RPC).
 
-**GET /metrics** – Simple JSON metrics (deposits, withdrawals, swaps, errors). Protect behind auth or internal network in production.
+**GET /metrics** – Simple JSON metrics (deposits, withdrawals, swaps, errors). In production, protected: requires `Authorization: Bearer <CRON_SECRET|API_INTERNAL_KEY>` or request from internal IP.
 
 ---
 

@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
         method: "POST",
         headers: cronHeaders,
       }),
+      fetch(`${apiBase}/api/v1/cron/cleanup-expired-tokens`, {
+        method: "POST",
+        headers: cronHeaders,
+      }),
     ]);
     const usdOk = usd.ok;
     const eurOk = eur.ok;

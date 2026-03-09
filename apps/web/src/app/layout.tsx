@@ -10,6 +10,7 @@ import { AskKanoShell } from "@/components/AskKanoShell";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { RegisterServiceWorker } from "@/components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://kanoxchange.com"),
@@ -17,6 +18,12 @@ export const metadata: Metadata = {
   description:
     "Buy, sell, and trade crypto the easy way. KanoWallet and KanoExchange – built for everyone.",
   openGraph: { url: "https://kanoxchange.com" },
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: "KanoXchange" },
+};
+
+export const viewport = {
+  themeColor: "#0ea5e9",
 };
 
 export default function RootLayout({
@@ -32,6 +39,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-theme text-theme">
+        <RegisterServiceWorker />
         <AppErrorBoundary>
         <ThemeInit />
         <LanguageProvider>

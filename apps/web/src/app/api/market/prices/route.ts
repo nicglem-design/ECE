@@ -31,11 +31,11 @@ async function getOurPricesFromApi(currency: string): Promise<{
 }
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 30;
 
+const CACHE_TTL = 30;
 const CACHE_HEADERS = {
-  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-  Pragma: "no-cache",
+  "Cache-Control": `public, s-maxage=${CACHE_TTL}, stale-while-revalidate=60`,
 };
 
 /** Fetch prices for arbitrary coin ids from CoinGecko. */

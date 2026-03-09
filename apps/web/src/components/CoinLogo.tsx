@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { TokenLogo } from "@/components/TokenLogo";
 
 /**
@@ -21,14 +22,14 @@ export function CoinLogo({ image, coinId, symbol, size = 32, className = "" }: C
 
   if (image && !imgError) {
     return (
-      <img
+      <Image
         src={image}
-        alt=""
+        alt={`${symbol ?? coinId} logo`}
         width={size}
         height={size}
         className={`shrink-0 rounded-full object-cover ${className}`}
-        referrerPolicy="no-referrer"
         loading="lazy"
+        unoptimized={!image.includes("coingecko.com")}
         onError={() => setImgError(true)}
       />
     );

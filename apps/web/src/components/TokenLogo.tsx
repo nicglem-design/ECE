@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { CHAIN_TO_COINGECKO } from "@/lib/coin-ids";
 import { COINGECKO_IMAGE_URLS } from "@/lib/coin-images";
 
@@ -46,13 +47,13 @@ export function TokenLogo({ chainId, symbol, size = 32, className = "" }: TokenL
 
   if (src) {
     return (
-      <img
+      <Image
         src={src}
-        alt=""
+        alt={`${symbol ?? chainId} logo`}
         width={size}
         height={size}
         className={`shrink-0 rounded-full object-cover ${className}`}
-        referrerPolicy="no-referrer"
+        unoptimized={!src.includes("coingecko.com")}
         onError={() => {
           imageCache[cgId] = null;
           setSrc(null);

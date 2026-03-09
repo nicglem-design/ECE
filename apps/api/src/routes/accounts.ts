@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
 import Stripe from "stripe";
+import { z } from "zod";
 import { db } from "../db";
 import { authMiddleware } from "../middleware/auth";
+import { validateBody } from "../middleware/validate";
 import { config } from "../config";
 import { require2FAIfEnabled } from "../crypto/twofaVerify";
 import { v4 as uuidv4 } from "uuid";
@@ -13,6 +15,26 @@ import { sendWithdrawalConfirmationEmail } from "../lib/email";
 import { increment } from "../lib/metrics";
 
 const router = Router();
+
+const createCheckoutSchema = z.object({
+  currency: z.string().optional().default("USD"),
+  amount: z.coerce.number().min(0.5).max(10000),
+  successUrl: z.string().url().optional(),
+  cancelUrl: z.string().url().optional(),
+}).strict();
+
+const depositSchema = z.object({
+  currency: z.string().min(1).max(10),
+  amount: z.coerce.number().positive().max(100000),
+  method: z.string().max(50).optional(),
+}).strict();
+
+const withdrawSchema = z.object({
+  currency: z.string().min(1).max(10),
+  amount: z.coerce.number().positive(),
+  linkedAccountId: z.string().optional(),
+  totpCode: z.string().optional(),
+}).strict();
 const stripe = config.stripeSecretKey ? new Stripe(config.stripeSecretKey) : null;
 
 const SUPPORTED_FIAT = ["USD", "EUR", "GBP", "SEK"];
@@ -160,7 +182,7 @@ router.get("/connect-status", authMiddleware, async (req: Request, res: Response
 });
 
 /** POST /api/v1/accounts/create-checkout - Create Stripe Checkout for deposit (card + Apple Pay) */
-router.post("/create-checkout", authMiddleware, async (req: Request, res: Response) => {
+router.post("/create-checkout", authMiddleware, validateBody(createCheckoutSchema), async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -224,7 +246,7 @@ router.post("/create-checkout", authMiddleware, async (req: Request, res: Respon
 });
 
 /** POST /api/v1/accounts/deposit - Add fiat to account (manual/demo). Restricted in production unless ALLOW_MANUAL_DEPOSIT=true. */
-router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
+router.post("/deposit", authMiddleware, validateBody(depositSchema), async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });
@@ -269,7 +291,7 @@ router.post("/deposit", authMiddleware, async (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/accounts/withdraw - Withdraw fiat to bank (Stripe Connect) or record only */
-router.post("/withdraw", authMiddleware, async (req: Request, res: Response) => {
+router.post("/withdraw", authMiddleware, validateBody(withdrawSchema), async (req: Request, res: Response) => {
   const user = (req as Request & { user?: { sub: string } }).user;
   if (!user) {
     res.status(401).json({ message: "Unauthorized" });

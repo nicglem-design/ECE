@@ -16,6 +16,9 @@ import { handleStripeWebhook } from "./routes/stripeWebhook";
 import { handleKycWebhook } from "./routes/kycWebhook";
 import { config } from "./config";
 import { apiLimiter, authLimiter, supportContactLimiter, aiChatLimiter } from "./middleware/rateLimit";
+import { requestIdMiddleware } from "./middleware/requestId";
+import { requestLogMiddleware } from "./middleware/requestLog";
+import { metricsAuthMiddleware } from "./middleware/metricsAuth";
 import { getReadyStatus } from "./lib/health";
 import { runStartupCheck } from "./lib/startupCheck";
 import { cleanupExpiredTokens } from "./lib/cleanupTokens";
@@ -39,6 +42,8 @@ const corsOrigins = config.corsOrigins
   ? config.corsOrigins.split(",").map((o) => o.trim()).filter(Boolean)
   : true;
 app.use(cors({ origin: corsOrigins, credentials: true }));
+app.use(requestIdMiddleware);
+app.use(requestLogMiddleware);
 app.post("/api/v1/accounts/stripe-webhook", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.post("/api/v1/kyc/webhook", express.raw({ type: "application/json" }), handleKycWebhook);
 app.use(express.json({ limit: "100kb" }));
@@ -59,9 +64,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/health/ready", async (_req, res) => {
+app.get("/health/ready", async (req, res) => {
   try {
-    const status = await getReadyStatus();
+    const deep = req.query.deep === "true" || req.query.deep === "1";
+    const status = await getReadyStatus(deep);
     res.status(status.ok ? 200 : 503).json(status);
   } catch (err) {
     res.status(503).json({
@@ -73,7 +79,7 @@ app.get("/health/ready", async (_req, res) => {
   }
 });
 
-app.get("/metrics", (_req, res) => {
+app.get("/metrics", metricsAuthMiddleware, (_req, res) => {
   res.json(getMetrics());
 });
 
