@@ -23,27 +23,31 @@ export function WalletNav() {
         <div className="flex items-center gap-4">
           <Link
             href="/wallet"
+            data-tutorial="tutorial-wallet"
             className={`text-sm ${isWallet ? "text-sky-400" : "text-slate-400 hover:text-sky-400"}`}
           >
             {t("nav.wallet")}
           </Link>
-          <Link href="/wallet/portfolio" className="text-sm text-slate-400 hover:text-sky-400">
+          <Link href="/wallet/portfolio" data-tutorial="tutorial-portfolio" className="text-sm text-slate-400 hover:text-sky-400">
             {t("nav.portfolio")}
           </Link>
           <Link
             href="/accounts"
+            data-tutorial="tutorial-accounts"
             className={`text-sm ${isAccounts ? "text-green-400" : "text-slate-400 hover:text-sky-400"}`}
           >
             Accounts
           </Link>
-          <Link href="/exchange" className="text-sm text-slate-400 hover:text-sky-400">
+          <Link href="/exchange" data-tutorial="tutorial-exchange" className="text-sm text-slate-400 hover:text-sky-400">
             {t("nav.exchange")}
           </Link>
-          <Link href="/profile" className="text-sm text-slate-400 hover:text-sky-400">
+          <Link href="/profile" data-tutorial="tutorial-profile" className="text-sm text-slate-400 hover:text-sky-400">
             {t("nav.profile")}
           </Link>
           <TerminologyToggle />
-          <AskKanoButton />
+          <span data-tutorial="tutorial-ask-kano" className="inline-block">
+            <AskKanoButton />
+          </span>
           {isAuthenticated ? (
             <button
               type="button"

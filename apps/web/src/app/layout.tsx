@@ -11,6 +11,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { RegisterServiceWorker } from "@/components/ServiceWorkerRegistration";
+import { TutorialOverlay } from "@/components/TutorialOverlay";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://kanoxchange.com"),
@@ -50,6 +51,7 @@ export default function RootLayout({
                 <AskKanoProvider>
                   <AskKanoShell />
                   {children}
+                  <TutorialOverlay />
                   <CookieConsent />
                 </AskKanoProvider>
                 </ChartModeProvider>
