@@ -1,0 +1,23 @@
+{
+  "name": "KanoXchange",
+  "short_name": "KanoX",
+  "description": "Easy Crypto Exchange & Wallet – Buy, sell, and trade crypto the easy way.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/kanox-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/kanox-logo-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
