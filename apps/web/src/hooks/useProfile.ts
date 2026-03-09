@@ -10,6 +10,7 @@ export interface Profile {
   avatarUrl: string;
   theme: string;
   preferredCurrency: string;
+  preferredTerminology?: "simple" | "pro";
 }
 
 export function useProfile() {

@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useAuth } from "./AuthContext";
+import { useProfile } from "@/hooks/useProfile";
 
 const STORAGE_KEY = "kanox_terminology";
 
@@ -15,6 +17,8 @@ type TerminologyContextType = {
 const TerminologyContext = createContext<TerminologyContextType | null>(null);
 
 export function TerminologyProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const { profile, updateProfile } = useProfile();
   const [mode, setModeState] = useState<TerminologyMode>("simple");
 
   useEffect(() => {
@@ -22,10 +26,24 @@ export function TerminologyProvider({ children }: { children: React.ReactNode })
     if (stored === "simple" || stored === "pro") setModeState(stored);
   }, []);
 
-  const setMode = useCallback((m: TerminologyMode) => {
-    setModeState(m);
-    localStorage.setItem(STORAGE_KEY, m);
-  }, []);
+  useEffect(() => {
+    if (isAuthenticated && profile?.preferredTerminology) {
+      const p = profile.preferredTerminology === "pro" ? "pro" : "simple";
+      setModeState(p);
+      localStorage.setItem(STORAGE_KEY, p);
+    }
+  }, [isAuthenticated, profile?.preferredTerminology]);
+
+  const setMode = useCallback(
+    (m: TerminologyMode) => {
+      setModeState(m);
+      localStorage.setItem(STORAGE_KEY, m);
+      if (isAuthenticated) {
+        updateProfile({ preferredTerminology: m });
+      }
+    },
+    [isAuthenticated, updateProfile]
+  );
 
   return (
     <TerminologyContext.Provider value={{ mode, setMode, isPro: mode === "pro" }}>

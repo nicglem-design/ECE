@@ -46,6 +46,7 @@ export default function ProfilePage() {
   const [twofaSetup, setTwofaSetup] = useState<{ qrDataUrl: string; secret: string } | null>(null);
   const [twofaVerifyCode, setTwofaVerifyCode] = useState("");
   const [twofaDisableCode, setTwofaDisableCode] = useState("");
+  const [twofaBackupCodes, setTwofaBackupCodes] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (profile) {
@@ -80,6 +81,7 @@ export default function ProfilePage() {
       avatarUrl: avatarUrl || undefined,
       theme,
       preferredCurrency: preferredCurrency || "usd",
+      preferredTerminology: terminology,
     });
     setSaving(false);
     if (result.ok) {
@@ -278,7 +280,28 @@ export default function ProfilePage() {
             <p className="mt-1 text-sm text-slate-500">
               Require a code from your authenticator app when sending crypto or withdrawing fiat.
             </p>
-            {twofaEnabled ? (
+            {twofaBackupCodes ? (
+              <div className="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/20 p-4">
+                <p className="text-sm font-medium text-amber-200">Save your backup codes</p>
+                <p className="mt-1 text-xs text-amber-200/80">
+                  Store these codes safely. Each can be used once if you lose access to your authenticator app.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-slate-200">
+                  {twofaBackupCodes.map((code, i) => (
+                    <code key={i} className="rounded bg-slate-800/80 px-2 py-1">
+                      {code}
+                    </code>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTwofaBackupCodes(null)}
+                  className="mt-4 rounded bg-sky-500/20 px-3 py-2 text-sm text-sky-400 hover:bg-sky-500/30"
+                >
+                  I&apos;ve saved my backup codes
+                </button>
+              </div>
+            ) : twofaEnabled ? (
               <div className="mt-4">
                 <p className="text-sm text-green-400">2FA is enabled</p>
                 <div className="mt-3 flex items-center gap-3">
@@ -330,10 +353,11 @@ export default function ProfilePage() {
                     onClick={async () => {
                       setTwofaLoading(true);
                       try {
-                        await apiPost("/api/v1/2fa/verify", { code: twofaVerifyCode });
+                        const res = await apiPost<{ backupCodes?: string[] }>("/api/v1/2fa/verify", { code: twofaVerifyCode });
                         setTwofaSetup(null);
                         setTwofaVerifyCode("");
                         setTwofaEnabled(true);
+                        if (res?.backupCodes?.length) setTwofaBackupCodes(res.backupCodes);
                       } catch {
                         // ignore
                       } finally {
@@ -374,13 +398,23 @@ export default function ProfilePage() {
               </button>
             )}
           </div>
-          <div className="mt-6 flex flex-wrap gap-4">
+          <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link href="/kyc" className="text-sky-400 hover:underline">
               {t("kyc.verifyIdentity")}
             </Link>
             <Link href="/" className="text-sky-400 hover:underline">
               {t("nav.backTo")}
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                router.refresh();
+              }}
+              className="rounded-lg border border-slate-600 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-300 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400"
+            >
+              {t("nav.logout")}
+            </button>
           </div>
         </div>
       </main>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 
 export default function RegisterPage() {
   const { t } = useLanguage();
@@ -54,28 +55,42 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-theme">
+    <main className="flex min-h-screen items-center justify-center bg-theme" role="main">
       <div className="w-full max-w-md rounded-2xl border border-slate-400/30 bg-slate-800/40 backdrop-blur-xl p-8">
         <h1 className="text-2xl font-bold text-slate-200">{t("auth.registerTitle")}</h1>
         <p className="mt-2 text-sm text-slate-400">{t("auth.registerDesc")}</p>
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4" aria-label="Registration form">
+          <label htmlFor="register-email" className="sr-only">
+            {t("auth.email")}
+          </label>
           <input
+            id="register-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={t("auth.emailPlaceholder")}
             required
+            autoComplete="email"
+            aria-required="true"
             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
           />
+          <label htmlFor="register-password" className="sr-only">
+            {t("auth.password")}
+          </label>
           <input
+            id="register-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t("auth.passwordPlaceholder")}
             required
             minLength={8}
+            autoComplete="new-password"
+            aria-required="true"
+            aria-describedby="password-strength"
             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
           />
+          <PasswordStrengthIndicator password={password} />
           <div>
             <label className="mb-1 block text-sm text-slate-400">{t("auth.birthDate")}</label>
             <input

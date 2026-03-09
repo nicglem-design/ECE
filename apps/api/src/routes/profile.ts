@@ -11,6 +11,7 @@ export const profilePatchSchema = z.object({
   avatarUrl: z.union([z.string().url().max(500), z.literal("")]).optional(),
   theme: z.enum(["dark", "light", "system"]).optional(),
   preferredCurrency: z.enum(["usd", "eur", "gbp", "sek"]).optional(),
+  preferredTerminology: z.enum(["simple", "pro"]).optional(),
 }).strict();
 
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
@@ -20,8 +21,8 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     return;
   }
   const row = (await db.prepare(
-    "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency FROM profiles WHERE user_id = ?"
-  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string } | undefined;
+    "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency, preferred_terminology as preferredTerminology FROM profiles WHERE user_id = ?"
+  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string; preferredTerminology?: string } | undefined;
   if (!row) {
     res.json({
       id: user.sub,
@@ -30,6 +31,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
       avatarUrl: "",
       theme: "dark",
       preferredCurrency: "usd",
+      preferredTerminology: "simple",
     });
     return;
   }
@@ -40,6 +42,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     avatarUrl: row.avatarUrl || "",
     theme: row.theme || "dark",
     preferredCurrency: row.preferredCurrency || "usd",
+    preferredTerminology: row.preferredTerminology === "pro" ? "pro" : "simple",
   });
 });
 
@@ -49,7 +52,7 @@ router.patch("/", authMiddleware, validateBody(profilePatchSchema), async (req: 
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const { displayName, avatarUrl, theme, preferredCurrency } = req.body;
+  const { displayName, avatarUrl, theme, preferredCurrency, preferredTerminology } = req.body;
   const now = Date.now();
   await db.prepare(
     `UPDATE profiles SET 
@@ -57,6 +60,7 @@ router.patch("/", authMiddleware, validateBody(profilePatchSchema), async (req: 
       avatar_url = COALESCE(?, avatar_url),
       theme = COALESCE(?, theme),
       preferred_currency = COALESCE(?, preferred_currency),
+      preferred_terminology = COALESCE(?, preferred_terminology),
       updated_at = ?
     WHERE user_id = ?`
   ).run(
@@ -64,12 +68,13 @@ router.patch("/", authMiddleware, validateBody(profilePatchSchema), async (req: 
     avatarUrl ?? null,
     theme ?? null,
     preferredCurrency ?? null,
+    preferredTerminology ?? null,
     now,
     user.sub
   );
   const row = (await db.prepare(
-    "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency FROM profiles WHERE user_id = ?"
-  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string };
+    "SELECT display_name as displayName, avatar_url as avatarUrl, theme, preferred_currency as preferredCurrency, preferred_terminology as preferredTerminology FROM profiles WHERE user_id = ?"
+  ).get(user.sub)) as { displayName: string; avatarUrl: string; theme: string; preferredCurrency: string; preferredTerminology?: string };
   res.json({
     id: (req as Request & { user?: { sub: string } }).user!.sub,
     email: (req as Request & { user?: { email: string } }).user!.email,
@@ -77,6 +82,7 @@ router.patch("/", authMiddleware, validateBody(profilePatchSchema), async (req: 
     avatarUrl: row?.avatarUrl || "",
     theme: row?.theme || "dark",
     preferredCurrency: row?.preferredCurrency || "usd",
+    preferredTerminology: row?.preferredTerminology === "pro" ? "pro" : "simple",
   });
 });
 

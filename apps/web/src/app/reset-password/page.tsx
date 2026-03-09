@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { PasswordStrengthIndicator } from "@/components/PasswordStrengthIndicator";
 
 function ResetPasswordContent() {
   const { t } = useLanguage();
@@ -89,8 +90,10 @@ function ResetPasswordContent() {
               placeholder={t("auth.newPassword") || "New password"}
               required
               minLength={8}
+              autoComplete="new-password"
               className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
             />
+            <PasswordStrengthIndicator password={password} />
             <input
               type="password"
               value={confirmPassword}

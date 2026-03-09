@@ -196,6 +196,13 @@ if (connectionString) {
           updated_at INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS user_2fa_backup_codes (
+          user_id TEXT NOT NULL REFERENCES users(id),
+          code_hash TEXT NOT NULL,
+          created_at BIGINT NOT NULL,
+          PRIMARY KEY (user_id, code_hash)
+        );
+
         CREATE TABLE IF NOT EXISTS market_orders (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -279,6 +286,11 @@ if (connectionString) {
       }
       try {
         await db.exec("ALTER TABLE users ADD COLUMN tos_accepted_at BIGINT");
+      } catch {
+        /* column may exist */
+      }
+      try {
+        await db.exec("ALTER TABLE profiles ADD COLUMN preferred_terminology TEXT DEFAULT 'simple'");
       } catch {
         /* column may exist */
       }
@@ -431,6 +443,13 @@ if (connectionString) {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS user_2fa_backup_codes (
+      user_id TEXT NOT NULL REFERENCES users(id),
+      code_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, code_hash)
+    );
+
     CREATE TABLE IF NOT EXISTS market_orders (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -485,6 +504,11 @@ if (connectionString) {
     }
     try {
       database.exec("ALTER TABLE users ADD COLUMN tos_accepted_at INTEGER");
+    } catch {
+      /* column may exist */
+    }
+    try {
+      database.exec("ALTER TABLE profiles ADD COLUMN preferred_terminology TEXT DEFAULT 'simple'");
     } catch {
       /* column may exist */
     }

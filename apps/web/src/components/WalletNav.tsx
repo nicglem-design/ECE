@@ -46,7 +46,9 @@ export function WalletNav() {
           <AskKanoButton />
           {isAuthenticated ? (
             <button
+              type="button"
               onClick={() => { logout(); router.refresh(); }}
+              aria-label={t("nav.logout")}
               className="text-sm text-slate-400 hover:text-sky-400"
             >
               {t("nav.logout")}

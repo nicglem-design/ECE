@@ -9,7 +9,9 @@ export function AskKanoButton() {
 
   return (
     <button
+      type="button"
       onClick={() => setOpen(true)}
+      aria-label={t("ai.askKano")}
       className="rounded-lg bg-sky-500/20 px-3 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/30"
     >
       {t("ai.askKano")}

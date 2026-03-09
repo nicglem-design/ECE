@@ -22,6 +22,11 @@ describe("Profile PATCH Zod schema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts valid preferredTerminology", () => {
+    const result = profilePatchSchema.safeParse({ preferredTerminology: "pro" });
+    expect(result.success).toBe(true);
+  });
+
   it("accepts empty avatarUrl", () => {
     const result = profilePatchSchema.safeParse({ avatarUrl: "" });
     expect(result.success).toBe(true);
@@ -44,6 +49,11 @@ describe("Profile PATCH Zod schema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects invalid preferredTerminology", () => {
+    const result = profilePatchSchema.safeParse({ preferredTerminology: "expert" });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects unknown fields (strict)", () => {
     const result = profilePatchSchema.safeParse({ displayName: "John", foo: "bar" });
     expect(result.success).toBe(false);
@@ -59,6 +69,7 @@ describe("Profile PATCH Zod schema", () => {
       displayName: "Alice",
       theme: "light",
       preferredCurrency: "gbp",
+      preferredTerminology: "pro",
     });
     expect(result.success).toBe(true);
   });
