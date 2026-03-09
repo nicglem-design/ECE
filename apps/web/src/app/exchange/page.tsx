@@ -11,6 +11,7 @@ import { CryptoListWidget } from "@/components/CryptoListWidget";
 import { PopularCryptoWidget } from "@/components/PopularCryptoWidget";
 import { SwapWidget } from "@/components/SwapWidget";
 import { LimitOrderWidget } from "@/components/LimitOrderWidget";
+import { ChartAnalysisWidget } from "@/components/ChartAnalysisWidget";
 import { TerminologyToggle } from "@/components/TerminologyToggle";
 
 function ExchangeContent() {
@@ -98,6 +99,7 @@ function ExchangeContent() {
           <div className="mt-8 grid gap-8 lg:grid-cols-2">
             <div className="space-y-6">
               <CryptoListWidget />
+              <ChartAnalysisWidget />
               <PopularCryptoWidget />
             </div>
             <div className="space-y-8">

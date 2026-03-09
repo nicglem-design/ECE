@@ -11,6 +11,7 @@ export interface Profile {
   theme: string;
   preferredCurrency: string;
   preferredTerminology?: "simple" | "pro";
+  dashboardLayout?: string[] | null;
 }
 
 export function useProfile() {

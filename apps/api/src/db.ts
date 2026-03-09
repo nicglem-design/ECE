@@ -294,6 +294,11 @@ if (connectionString) {
       } catch {
         /* column may exist */
       }
+      try {
+        await db.exec("ALTER TABLE profiles ADD COLUMN dashboard_layout TEXT");
+      } catch {
+        /* column may exist */
+      }
     } catch (err) {
       logger.error({ err }, "Supabase schema init error");
     }
@@ -509,6 +514,11 @@ if (connectionString) {
     }
     try {
       database.exec("ALTER TABLE profiles ADD COLUMN preferred_terminology TEXT DEFAULT 'simple'");
+    } catch {
+      /* column may exist */
+    }
+    try {
+      database.exec("ALTER TABLE profiles ADD COLUMN dashboard_layout TEXT");
     } catch {
       /* column may exist */
     }
