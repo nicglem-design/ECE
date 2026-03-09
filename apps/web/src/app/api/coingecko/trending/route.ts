@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         };
       }>;
     };
-    const items = (trendingData.coins ?? []).slice(0, 5);
+    const items = (trendingData.coins ?? []).slice(0, 15);
     const ids = items.map((c) => c.item?.id).filter(Boolean) as string[];
     if (ids.length === 0) {
       return NextResponse.json([], {
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const marketsUrl = `${COINGECKO_BASE}/coins/markets?vs_currency=${currency}&ids=${ids.join(",")}&order=market_cap_desc&per_page=5&sparkline=true&price_change_percentage=24h`;
+    const marketsUrl = `${COINGECKO_BASE}/coins/markets?vs_currency=${currency}&ids=${ids.join(",")}&order=market_cap_desc&per_page=15&sparkline=true&price_change_percentage=24h`;
     const marketsRes = await fetchExternal(marketsUrl);
     if (marketsRes.ok) {
       const markets = (await marketsRes.json()) as Array<{

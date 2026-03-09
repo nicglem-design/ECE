@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useTerminology } from "@/contexts/TerminologyContext";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { TokenLogo } from "@/components/TokenLogo";
@@ -25,7 +24,6 @@ const DEFAULT_COINS = TOP_5_COINS.map((c) => ({
 }));
 
 export function ChartAnalysisWidget() {
-  const { t } = useLanguage();
   const { isPro } = useTerminology();
   const { currency } = useCurrency();
   const [selectedCoin, setSelectedCoin] = useState<{ id: string; symbol: string; name: string }>(DEFAULT_COINS[0]);
@@ -37,6 +35,7 @@ export function ChartAnalysisWidget() {
   const [sparkline, setSparkline] = useState<number[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (search.trim().length < 2) {
@@ -45,16 +44,20 @@ export function ChartAnalysisWidget() {
       return;
     }
     debounceRef.current = setTimeout(() => {
-      fetch(`/api/coingecko/search?query=${encodeURIComponent(search)}`)
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+      const signal = abortRef.current.signal;
+      fetch(`/api/coingecko/search?query=${encodeURIComponent(search)}`, { signal })
         .then((r) => r.json())
         .then((data: { coins?: SearchCoin[] }) => {
-          setSearchResults(data.coins ?? []);
+          setSearchResults((data.coins ?? []).slice(0, 10));
           setSearchOpen(true);
         })
         .catch(() => setSearchResults([]));
-    }, 200);
+    }, 120);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, [search]);
 
@@ -126,41 +129,27 @@ export function ChartAnalysisWidget() {
             className="w-full rounded-lg border border-slate-600 bg-slate-800 px-4 py-2.5 text-slate-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
           />
           {searchOpen && searchResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-lg border border-slate-600 bg-slate-800 shadow-xl">
-              {searchResults.slice(0, 15).map((c) => (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-52 overflow-auto rounded-lg border border-slate-600 bg-slate-800 shadow-xl">
+              {searchResults.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => selectCoin(c)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-700"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-700"
                 >
-                  <TokenLogo chainId={c.id} size={24} />
-                  <div>
+                  {c.thumb ? (
+                    <img src={c.thumb} alt="" className="h-6 w-6 shrink-0 rounded-full" />
+                  ) : (
+                    <TokenLogo chainId={c.id} size={24} />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <span className="font-medium text-slate-200">{c.symbol.toUpperCase()}</span>
-                    <span className="ml-2 text-slate-500">{c.name}</span>
+                    <span className="ml-2 truncate text-slate-500">{c.name}</span>
                   </div>
                 </button>
               ))}
             </div>
           )}
-        </div>
-
-        <div className="mt-4 flex items-center gap-2">
-          {DEFAULT_COINS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setSelectedCoin(c)}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                selectedCoin.id === c.id
-                  ? "bg-amber-500/30 text-amber-400"
-                  : "bg-slate-700/50 text-slate-400 hover:bg-slate-700"
-              }`}
-            >
-              <TokenLogo chainId={c.id} size={20} />
-              {c.symbol}
-            </button>
-          ))}
         </div>
       </div>
 

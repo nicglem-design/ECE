@@ -9,7 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@sumsub/websdk-react": "^2.6.1",
+    "braintree-web-drop-in": "^1.46.0",
     "lightweight-charts": "^5.1.0",
     "next": "^16.1.6",
     "qrcode": "^1.5.4",

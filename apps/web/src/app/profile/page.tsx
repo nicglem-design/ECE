@@ -10,7 +10,6 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useProfile } from "@/hooks/useProfile";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { applyTheme } from "@/components/ThemeInit";
-import { ALL_LOCALES, type LocaleCode } from "@/lib/translations";
 import { FiatCurrencyCombobox } from "@/components/FiatCurrencyCombobox";
 import { useTerminology } from "@/contexts/TerminologyContext";
 import { apiGet, apiPost } from "@/lib/apiClient";
@@ -28,7 +27,7 @@ const THEME_OPTIONS = [
 ];
 
 export default function ProfilePage() {
-  const { t, locale, setLocale } = useLanguage();
+  const { t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
   const { isAuthenticated, logout } = useAuth();
   const router = useRouter();
@@ -40,7 +39,6 @@ export default function ProfilePage() {
   const [preferredCurrency, setPreferredCurrency] = useState("usd");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [langSearch, setLangSearch] = useState("");
   const [twofaEnabled, setTwofaEnabled] = useState(false);
   const [twofaLoading, setTwofaLoading] = useState(false);
   const [twofaSetup, setTwofaSetup] = useState<{ qrDataUrl: string; secret: string } | null>(null);
@@ -63,14 +61,6 @@ export default function ProfilePage() {
       .then((d) => setTwofaEnabled(d.enabled))
       .catch(() => {});
   }, []);
-
-  const filteredLocales = langSearch
-    ? ALL_LOCALES.filter(
-        (l) =>
-          l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
-          l.code.toLowerCase().includes(langSearch.toLowerCase())
-      )
-    : ALL_LOCALES;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -243,28 +233,6 @@ export default function ProfilePage() {
                     placeholder={t("receive.searchFiat")}
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300">{t("profile.language")}</label>
-                <p className="mt-1 text-sm text-slate-500">{t("profile.languageDesc")}</p>
-                <input
-                  type="text"
-                  value={langSearch}
-                  onChange={(e) => setLangSearch(e.target.value)}
-                  placeholder={t("profile.searchLanguage")}
-                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-                />
-                <select
-                  value={locale}
-                  onChange={(e) => setLocale(e.target.value as LocaleCode)}
-                  className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-200 focus:border-sky-500 focus:outline-none"
-                >
-                  {filteredLocales.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
               </div>
               <button
                 type="submit"

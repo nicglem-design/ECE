@@ -15,6 +15,21 @@ import { CoinLogo } from "@/components/CoinLogo";
 const PER_PAGE = 250;
 const LOAD_ALL_DELAY_MS = 2000; // Delay between pages to avoid CoinGecko rate limits
 
+export type MarketFilter =
+  | "all"       // Market cap
+  | "risers"    // Biggest 24h gainers
+  | "fallers"   // Biggest 24h losers
+  | "active"    // Highest 24h volume (most traded)
+  | "buzz";     // Trending by search activity
+
+const FILTER_ORDER: Record<MarketFilter, string> = {
+  all: "market_cap_desc",
+  risers: "price_change_percentage_24h_desc",
+  fallers: "price_change_percentage_24h_asc",
+  active: "volume_desc",
+  buzz: "trending",
+};
+
 interface MarketCoin {
   id: string;
   symbol: string;
@@ -47,15 +62,30 @@ export default function MarketPage() {
   const [loadingAll, setLoadingAll] = useState(false);
   const [loadAllProgress, setLoadAllProgress] = useState<string | null>(null);
   const [orderbookActive, setOrderbookActive] = useState(false);
+  const [filter, setFilter] = useState<MarketFilter>("all");
   const fiat = (currency || "usd").toLowerCase();
 
   const fetchPage = useCallback(
-    async (pageNum: number, append: boolean) => {
+    async (pageNum: number, append: boolean, filterOverride?: MarketFilter) => {
+      const f = filterOverride ?? filter;
       if (append) setLoadingMore(true);
       else setLoading(true);
       try {
+        if (f === "buzz") {
+          const res = await fetch(`/api/coingecko/trending?currency=${encodeURIComponent(fiat)}`);
+          if (!res.ok) {
+            setHasMore(false);
+            return;
+          }
+          const data = (await res.json()) as MarketCoin[] | { error?: string };
+          const list = Array.isArray(data) ? data : [];
+          setCoins(list);
+          setHasMore(false);
+          return;
+        }
+        const order = FILTER_ORDER[f];
         const res = await fetch(
-          `/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&page=${pageNum}&per_page=${PER_PAGE}&sparkline=false&order=market_cap_desc`
+          `/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&page=${pageNum}&per_page=${PER_PAGE}&sparkline=false&order=${order}`
         );
         if (!res.ok) {
           setHasMore(false);
@@ -106,23 +136,24 @@ export default function MarketPage() {
         setLoadingMore(false);
       }
     },
-    [fiat]
+    [fiat, filter]
   );
 
   useEffect(() => {
     setPage(1);
     fetchPage(1, false);
-  }, [fiat]);
+  }, [fiat, filter]);
 
   useEffect(() => {
-    if (page > 1) fetchPage(page, true);
+    if (page > 1 && filter !== "buzz") fetchPage(page, true);
   }, [page]);
 
   const loadMore = () => setPage((p) => p + 1);
 
   const loadAll = useCallback(async () => {
-    if (loadingAll || loadingMore || loading) return;
+    if (loadingAll || loadingMore || loading || filter === "buzz") return;
     setLoadingAll(true);
+    const order = FILTER_ORDER[filter];
     let nextPage = Math.floor(coins.length / PER_PAGE) + 1;
     if (nextPage === 1) nextPage = 2; // We already have page 1
     let isOrderbookActive: boolean | null = null; // Check once, reuse for all pages
@@ -130,7 +161,7 @@ export default function MarketPage() {
       while (true) {
         setLoadAllProgress(`${(nextPage - 1) * PER_PAGE}+ coins loaded...`);
         const res = await fetch(
-          `/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&page=${nextPage}&per_page=${PER_PAGE}&sparkline=false&order=market_cap_desc`
+          `/api/coingecko/coins-markets?currency=${encodeURIComponent(fiat)}&page=${nextPage}&per_page=${PER_PAGE}&sparkline=false&order=${order}`
         );
         if (!res.ok) break;
         const data = (await res.json()) as MarketCoin[] | { error?: string };
@@ -181,7 +212,7 @@ export default function MarketPage() {
       setLoadingAll(false);
       setLoadAllProgress(null);
     }
-  }, [fiat, coins.length, loadingAll, loadingMore, loading]);
+  }, [fiat, filter, coins.length, loadingAll, loadingMore, loading]);
 
   return (
     <ProtectedRoute>
@@ -236,6 +267,23 @@ export default function MarketPage() {
               </span>
             )}
           </p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(["all", "risers", "fallers", "active", "buzz"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  filter === key
+                    ? "bg-amber-500 text-white"
+                    : "border border-slate-600 bg-slate-800/50 text-slate-400 hover:border-amber-500/50 hover:text-amber-400"
+                }`}
+              >
+                {t(`market.filter.${key}`)}
+              </button>
+            ))}
+          </div>
 
           {loading && coins.length === 0 ? (
             <div className="mt-8 space-y-2">
@@ -302,7 +350,7 @@ export default function MarketPage() {
                   );
                 })}
               </div>
-              {hasMore && (
+              {hasMore && filter !== "buzz" && (
                 <div className="mt-6 flex flex-col items-center gap-3">
                   <div className="flex flex-wrap justify-center gap-3">
                     <button
