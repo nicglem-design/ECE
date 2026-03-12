@@ -1,4 +1,5 @@
 import express from "express";
+import helmet from "helmet";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
@@ -37,6 +38,10 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
+app.use(helmet({
+  contentSecurityPolicy: false, // API returns JSON; CSP is for HTML pages
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 const corsOrigins = config.corsOrigins
   ? config.corsOrigins.split(",").map((o) => o.trim()).filter(Boolean)
   : true;

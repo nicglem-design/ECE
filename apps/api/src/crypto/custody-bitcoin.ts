@@ -23,7 +23,9 @@ const AUTH_TAG_LEN = 16;
 const MEMPOOL_API = process.env.BITCOIN_API_URL || "https://mempool.space/api";
 
 function getEncryptionKey(): Buffer | null {
-  const secret = process.env.WALLET_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  const secret =
+    process.env.WALLET_ENCRYPTION_KEY ||
+    (process.env.NODE_ENV !== "production" ? process.env.JWT_SECRET : null);
   if (!secret || secret.length < 16) return null;
   return scryptSync(secret, "kanox-btc-salt", 32);
 }

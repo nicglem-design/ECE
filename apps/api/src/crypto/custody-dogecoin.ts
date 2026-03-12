@@ -31,7 +31,9 @@ const AUTH_TAG_LEN = 16;
 const DOGECOIN_API = process.env.DOGECOIN_API_URL || "https://api.blockcypher.com/v1/doge/main";
 
 function getEncryptionKey(): Buffer | null {
-  const secret = process.env.WALLET_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  const secret =
+    process.env.WALLET_ENCRYPTION_KEY ||
+    (process.env.NODE_ENV !== "production" ? process.env.JWT_SECRET : null);
   if (!secret || secret.length < 16) return null;
   return scryptSync(secret, "kanox-doge-salt", 32);
 }

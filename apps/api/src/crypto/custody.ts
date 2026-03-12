@@ -20,7 +20,9 @@ const SALT_LEN = 32;
 const KEY_LEN = 32;
 
 function getEncryptionKey(): Buffer | null {
-  const secret = process.env.WALLET_ENCRYPTION_KEY || process.env.JWT_SECRET;
+  const secret =
+    process.env.WALLET_ENCRYPTION_KEY ||
+    (process.env.NODE_ENV !== "production" ? process.env.JWT_SECRET : null);
   if (!secret || secret.length < 16) return null;
   return scryptSync(secret, "kanox-wallet-salt", 32);
 }
